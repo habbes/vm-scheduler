@@ -107,13 +107,14 @@ void printParamValue(virTypedParameterPtr param)
 int main(int argc, char *argv[])
 {
     char * uri = "qemu:///system";
+    unsigned char cpumap = 0x0f;
     virConnectPtr conn = NULL;
-    virNodeInfo nodeInfo;
     GuestList *guestList = NULL;
     virDomainInfo domainInfo;
     virDomainPtr domain;
     virTypedParameterPtr params;
     int i = 0;
+    int rt = 0;
 
     conn = virConnectOpen(uri);
     check(conn, "Failed to connect to host");
@@ -144,6 +145,10 @@ int main(int argc, char *argv[])
             }
         }
         puts("");
+        rt = virDomainPinVcpu(domain, 0, &cpumap, 1);
+        check(rt == 0, "Failed to pin vCPU");
+        puts("pinned to cpus");
+        puts("");
         free(params);
     }
 
@@ -157,6 +162,9 @@ error:
     }
     if (conn) {
         virConnectClose(conn);
+    }
+    if (params) {
+        free(params);
     }
     return 1;
 }
