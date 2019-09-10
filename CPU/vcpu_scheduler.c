@@ -86,12 +86,14 @@ int guestListIdAt(GuestList *gl, int i)
 /* -- cpu stats -- */
 
 typedef long double CpuStatsUsage_t;
+typedef unsigned long long CpuStatsTime_t;
 
 typedef struct CpuStats {
     int numCpus;
     int numDomains;
     CpuStatsUsage_t *usages;
-    unsigned long long *times;
+    CpuStatsUsage_t *domainUsages;
+    CpuStatsTime_t *times;
 } CpuStats;
 
 #define CpuStatsCheckStatsArg(stats) check(stats, "stats is null")
@@ -102,6 +104,8 @@ typedef struct CpuStats {
     CpuStatsCheckCpuArg(cpu);\
     CpuStatsCheckDomainArg(domain);
 
+void CpuStatsFree(CpuStats *);
+
 CpuStats *CpuStatsCreate(int cpus, int domains)
 {
     CpuStats *stats = calloc(1, sizeof(CpuStats));
@@ -110,21 +114,15 @@ CpuStats *CpuStatsCreate(int cpus, int domains)
     stats->numDomains = domains;
     stats->usages = calloc(cpus, sizeof(CpuStatsUsage_t));
     checkMemAlloc(stats->usages);
-    stats->times = calloc(domains * cpus, sizeof(unsigned long long));
+    stats->times = calloc(domains * cpus, sizeof(CpuStatsTime_t));
     checkMemAlloc(stats->times);
+    stats->domainUsages = calloc(domains, sizeof(CpuStatsUsage_t));
+    checkMemAlloc(stats->domainUsages);
 
     return stats;
 
 error:
-    if (stats) {
-        if (stats->usages) {
-            free(stats->usages);
-        }
-        if (stats->times) {
-            free(stats->times);
-        }
-        free(stats);
-    }
+    CpuStatsFree(stats);
     return NULL;
 }
 
@@ -137,11 +135,14 @@ void CpuStatsFree(CpuStats *stats)
         if (stats->times) {
             free(stats->times);
         }
+        if (stats->domainUsages) {
+            free(stats->domainUsages);
+        }
         free(stats);
     }
 }
 
-int CpuStatsSetTime(CpuStats *stats, int cpu, int domain, unsigned long long time)
+int CpuStatsSetTime(CpuStats *stats, int cpu, int domain, CpuStatsTime_t time)
 {
     CpuStatsCheckArgs(stats, cpu, domain);
     *(stats->times + stats->numCpus * domain + cpu) = time;
@@ -150,7 +151,7 @@ error:
     return -1;
 }
 
-int CpuStatsGetTime(CpuStats *stats, int cpu, int domain, unsigned long long *timePtr)
+int CpuStatsGetTime(CpuStats *stats, int cpu, int domain, CpuStatsTime_t *timePtr)
 {
     CpuStatsCheckArgs(stats, cpu, domain);
     *timePtr = *(stats->times + stats->numCpus * domain + cpu);
@@ -163,6 +164,7 @@ int CpuStatsResetUsages(CpuStats *stats)
 {
     check(stats, "stats is null");
     memset(stats->usages, 0, sizeof(CpuStatsUsage_t) * stats->numCpus);
+    memset(stats->domainUsages, 0, sizeof(CpuStatsUsage_t) * stats->numDomains);
     return 0;
 error:
     return 1;
@@ -179,16 +181,37 @@ error:
     return -1;
 }
 
-int CpuStatsUsagesToPct(CpuStats *stats, double timeInterval)
+int CpuStatsAddDomainUsage(CpuStats *stats, int domain, CpuStatsUsage_t usage)
 {
     CpuStatsCheckStatsArg(stats);
+    CpuStatsCheckDomainArg(domain);
 
-    for (int i = 0; i < stats->numCpus; i++) {
+    stats->domainUsages[domain] = stats->domainUsages[domain] + usage;
+    return 0;
+
+error:
+    return -1;
+}
+
+int CpuStatsUsagesToPct(CpuStats *stats, double timeInterval)
+{
+    int i = 0;
+    CpuStatsCheckStatsArg(stats);
+
+    for (i = 0; i < stats->numCpus; i++) {
         stats->usages[i] = stats->usages[i] / 1e9;
         if (timeInterval > 0) {
             stats->usages[i] = stats->usages[i] / timeInterval;
         }
     }
+
+    for (i = 0; i < stats->numDomains; i++) {
+        stats->domainUsages[i] = stats->domainUsages[i] / 1e9;
+        if (timeInterval > 0) {
+            stats->domainUsages[i] = stats->domainUsages[i] / timeInterval;
+        }
+    }
+
     return 0;
 
 error:
@@ -197,7 +220,7 @@ error:
 
 int CpuStatsPrint(CpuStats *stats)
 {
-    unsigned long long cpuTime = 0;
+    CpuStatsTime_t cpuTime = 0;
     check(stats, "Stats cannot be null");
 
     for (int c = 0; c < stats->numCpus; c++) {
@@ -206,6 +229,7 @@ int CpuStatsPrint(CpuStats *stats)
 
     for (int i = 0; i < stats->numDomains; i++) {
         printf("domain %d\n", i);
+        printf("domain usage: %.2Lf\n", 100 * stats->domainUsages[i]);
         for (int c = 0; c < stats->numCpus; c++) {
             cpuTime = *(stats->times + stats->numCpus * i + c);
             printf("-- cpuTime %d: %llu\n", c, cpuTime);
@@ -259,6 +283,8 @@ int updateStats(CpuStats *stats, GuestList *guests, int timeInterval)
                         c, d, currTime, prevTime, timeDiff);
                     rt = CpuStatsAddUsage(stats, c, (CpuStatsUsage_t) timeDiff);
                     check(rt == 0, "failed to add cpu usage");
+                    rt = CpuStatsAddDomainUsage(stats, d, (CpuStatsUsage_t) timeDiff);
+                    check(rt == 0, "failed to add domain usage");
                     rt = CpuStatsSetTime(stats, c, d, currTime);
                     check(rt == 0, "failed to updated cpu time");
                 }
@@ -318,7 +344,7 @@ error:
         virConnectClose(conn);
     }
     if (stats) {
-        free(stats);
+        CpuStatsFree(stats);
     }
     return 1;
 }
