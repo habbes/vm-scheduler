@@ -282,30 +282,6 @@ final:
     return rt;
 }
 
-
-void printParamValue(virTypedParameterPtr param)
-{
-    switch(param->type) {
-        case VIR_TYPED_PARAM_INT:
-            printf("%d", param->value.i);
-            break;
-        case VIR_TYPED_PARAM_LLONG:
-            printf("%lld", param->value.l);
-            break;
-        case VIR_TYPED_PARAM_ULLONG:
-            printf("%llu", param->value.l);
-            break;
-        case VIR_TYPED_PARAM_STRING:
-            printf("%s", param->value.s);
-            break;
-        case VIR_TYPED_PARAM_DOUBLE:
-            printf("%.2f", param->value.d);
-            break;
-        default:
-            printf("%llu", param->value.ul);
-    }
-}
-
 int main(int argc, char *argv[])
 {
     char * uri = "qemu:///system";
@@ -324,11 +300,6 @@ int main(int argc, char *argv[])
 
     updateStats(stats, guests, -1);
     CpuStatsPrint(stats);
-
-    // unsigned char cpumap = 0x0f;
-    // for (int d = 0; d < guests->count; d++) {
-    //     virDomainPinVcpu(guestListDomainAt(guests, d), 0, &cpumap, 1);
-    // }
 
     sleep(2);
     updateStats(stats, guests, 2);
