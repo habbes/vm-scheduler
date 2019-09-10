@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <libvirt/libvirt.h>
 
 #define check(C, M) if (!(C)) {fprintf(stderr, (M)); fprintf(stderr, "\n"); goto error;}
+#define checkMemAlloc(P) check(P, "failed to allocate memory")
 
 /* -- guest -- */
 typedef struct Guest {
@@ -86,24 +88,28 @@ int guestListIdAt(GuestList *gl, int i)
 typedef struct CpuStats {
     int numCpus;
     int numDomains;
-    int *usages;
+    unsigned long long *usages;
     unsigned long long *times;
 } CpuStats;
 
-#define CpuStatsCheckArgs(stats, cpu, domain) check(stats, "Stats is null");\
-    check(cpu >= 0 && cpu < stats->numCpus, "cpu out of bounds");\
-    check(domain >= 0 && domain < stats->numDomains, "domain out of bounds");
+#define CpuStatsCheckStatsArg(stats) check(stats, "stats is null")
+#define CpuStatsCheckCpuArg(cpu) check(cpu >= 0 && cpu < stats->numCpus, "cpu out of bounds")
+#define CpuStatsCheckDomainArg(domain) check(domain >= 0 && domain < stats->numDomains, "domain out of bounds")
+
+#define CpuStatsCheckArgs(stats, cpu, domain) CpuStatsCheckStatsArg(stats);\
+    CpuStatsCheckCpuArg(cpu);\
+    CpuStatsCheckDomainArg(domain);
 
 CpuStats *CpuStatsCreate(int cpus, int domains)
 {
     CpuStats *stats = calloc(1, sizeof(CpuStats));
-    check(stats, "Failed to allocated CpuStats.");
+    checkMemAlloc(stats);
     stats->numCpus = cpus;
     stats->numDomains = domains;
-    stats->usages = calloc(cpus, sizeof(int));
-    check(stats->usages, "Failed to allocate stats->usages.");
+    stats->usages = calloc(cpus, sizeof(unsigned long long));
+    checkMemAlloc(stats->usages);
     stats->times = calloc(domains * cpus, sizeof(unsigned long long));
-    check(stats->times, "Failed to allocate stats->times.");
+    checkMemAlloc(stats->times);
 
     return stats;
 
@@ -142,10 +148,43 @@ error:
     return -1;
 }
 
+int CpuStatsGetTime(CpuStats *stats, int cpu, int domain, unsigned long long *timePtr)
+{
+    CpuStatsCheckArgs(stats, cpu, domain);
+    *timePtr = *(stats->times + stats->numCpus * domain + cpu);
+    return 0;
+error:
+    return -1;
+}
+
+int CpuStatsResetUsages(CpuStats *stats)
+{
+    check(stats, "stats is null");
+    memset(stats->usages, 0, sizeof(unsigned long long) * stats->numCpus);
+    return 0;
+error:
+    return 1;
+}
+
+int CpuStatsAddUsage(CpuStats *stats, int cpu, unsigned long long usage)
+{
+    CpuStatsCheckStatsArg(stats);
+    CpuStatsCheckCpuArg(cpu);
+
+    stats->usages[cpu] = stats->usages[cpu] + usage;
+    return 0;
+error:
+    return -1;
+}
+
 int CpuStatsPrint(CpuStats *stats)
 {
     unsigned long long cpuTime = 0;
     check(stats, "Stats cannot be null");
+
+    for (int c = 0; c < stats->numCpus; c++) {
+        printf("cpu %d usage: %llu\n", c, stats->usages[c]);
+    }
 
     for (int i = 0; i < stats->numDomains; i++) {
         printf("domain %d\n", i);
@@ -206,6 +245,68 @@ final:
     return rt;
 }
 
+int computeUsage(CpuStats *stats, GuestList *guests)
+{
+    int nparams = 0;
+    int d = 0; // domain iterator
+    int c = 0; // cpu iterator
+    int p = 0; // param iterator
+    int paramPos = 0;
+    unsigned long long prevTime = 0L;
+    unsigned long long currTime = 0L;
+    unsigned long long timeDiff = 0L;
+    int rt = 0;
+    virDomainPtr domain = NULL;
+    virTypedParameterPtr params = NULL;
+
+    check(stats, "stats is null");
+    check(guests, "guests is null");
+ 
+    nparams = virDomainGetCPUStats(guestListDomainAt(guests, 0), NULL, 0, 0, 1, 0);
+    check(nparams >= 0, "failed to get domain cpu params");
+    params = calloc(stats->numCpus * nparams, sizeof(virTypedParameter));
+    check(params, "failed to allocated params");
+
+    rt = CpuStatsResetUsages(stats);
+    check(rt == 0, "failed to reset usages");
+
+    for (d = 0; d < guests->count; d++) {
+        domain = guestListDomainAt(guests, d);
+        virDomainGetCPUStats(domain, params, nparams, 0, stats->numCpus, 0);
+
+        for (c = 0; c < stats->numCpus; c++) {
+            for (p = 0; p < nparams; p++) {
+                paramPos = nparams * c + p;
+
+                if (strncmp(params[paramPos].field, "vcpu_time", VIR_TYPED_PARAM_FIELD_LENGTH) == 0) {
+                    rt = CpuStatsGetTime(stats, c, d, &prevTime);
+                    check(rt == 0, "failed to get cpu time from stats");
+                    currTime = params[paramPos].value.ul;
+                    timeDiff = currTime - prevTime;
+                    printf("--- cpu %d, domain %d, cur time %llu prev time %llu diff %llu\n",
+                        c, d, currTime, prevTime, timeDiff);
+                    rt = CpuStatsAddUsage(stats, c, timeDiff);
+                    check(rt == 0, "failed to add cpu usage");
+                    rt = CpuStatsSetTime(stats, c, d, currTime);
+                    check(rt == 0, "failed to updated cpu time");
+                }
+            }
+        }
+        puts("");
+    }
+
+    rt = 0;
+    goto final;
+
+error:
+    rt = -1;
+final:
+    if (params) {
+        free(params);
+    }
+    return rt;
+}
+
 
 void printParamValue(virTypedParameterPtr param)
 {
@@ -247,6 +348,15 @@ int main(int argc, char *argv[])
     check(stats, "Failed to create stats");
 
     updateStats(stats, guests);
+    CpuStatsPrint(stats);
+
+    // unsigned char cpumap = 0x0f;
+    // for (int d = 0; d < guests->count; d++) {
+    //     virDomainPinVcpu(guestListDomainAt(guests, d), 0, &cpumap, 1);
+    // }
+
+    sleep(2);
+    computeUsage(stats, guests);
     CpuStatsPrint(stats);
 
     guestListFree(guests);
