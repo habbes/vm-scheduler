@@ -87,12 +87,14 @@ int guestListIdAt(GuestList *gl, int i)
 
 typedef long double CpuStatsUsage_t;
 typedef unsigned long long CpuStatsTime_t;
+typedef long double CpuStatsWeight_t;
 
 typedef struct CpuStats {
     int numCpus;
     int numDomains;
     CpuStatsUsage_t *usages;
     CpuStatsUsage_t *domainUsages;
+    CpuStatsWeight_t *cpuWeights;
     CpuStatsTime_t *times;
 } CpuStats;
 
@@ -114,6 +116,8 @@ CpuStats *CpuStatsCreate(int cpus, int domains)
     stats->numDomains = domains;
     stats->usages = calloc(cpus, sizeof(CpuStatsUsage_t));
     checkMemAlloc(stats->usages);
+    stats->cpuWeights = calloc(cpus, sizeof(CpuStatsWeight_t));
+    checkMemAlloc(stats->cpuWeights);
     stats->times = calloc(domains * cpus, sizeof(CpuStatsTime_t));
     checkMemAlloc(stats->times);
     stats->domainUsages = calloc(domains, sizeof(CpuStatsUsage_t));
@@ -137,6 +141,9 @@ void CpuStatsFree(CpuStats *stats)
         }
         if (stats->domainUsages) {
             free(stats->domainUsages);
+        }
+        if (stats->cpuWeights) {
+            free(stats->cpuWeights);
         }
         free(stats);
     }
@@ -165,6 +172,7 @@ int CpuStatsResetUsages(CpuStats *stats)
     check(stats, "stats is null");
     memset(stats->usages, 0, sizeof(CpuStatsUsage_t) * stats->numCpus);
     memset(stats->domainUsages, 0, sizeof(CpuStatsUsage_t) * stats->numDomains);
+    memset(stats->cpuWeights, 0, sizeof(CpuStatsWeight_t) * stats->numCpus);
     return 0;
 error:
     return 1;
@@ -196,6 +204,7 @@ error:
 int CpuStatsUsagesToPct(CpuStats *stats, double timeInterval)
 {
     int i = 0;
+    CpuStatsUsage_t totalUsage = 0;
     CpuStatsCheckStatsArg(stats);
 
     for (i = 0; i < stats->numCpus; i++) {
@@ -203,6 +212,12 @@ int CpuStatsUsagesToPct(CpuStats *stats, double timeInterval)
         if (timeInterval > 0) {
             stats->usages[i] = stats->usages[i] / timeInterval;
         }
+        totalUsage = totalUsage + stats->usages[i];
+    }
+
+    for (i = 0; i < stats->numCpus; i++) {
+        stats->cpuWeights[i] = totalUsage != 0 ?
+            (CpuStatsWeight_t) (stats->usages[i] / totalUsage) : 1.0 / totalUsage;
     }
 
     for (i = 0; i < stats->numDomains; i++) {
@@ -220,20 +235,21 @@ error:
 
 int CpuStatsPrint(CpuStats *stats)
 {
-    CpuStatsTime_t cpuTime = 0;
+    // CpuStatsTime_t cpuTime = 0;
     check(stats, "Stats cannot be null");
 
     for (int c = 0; c < stats->numCpus; c++) {
         printf("cpu %d usage: %.2Lf\n", c, 100 * stats->usages[c]);
+        printf("- cpu weight %.2Lf\n", stats->cpuWeights[c]);
     }
 
     for (int i = 0; i < stats->numDomains; i++) {
         printf("domain %d\n", i);
         printf("domain usage: %.2Lf\n", 100 * stats->domainUsages[i]);
-        for (int c = 0; c < stats->numCpus; c++) {
-            cpuTime = *(stats->times + stats->numCpus * i + c);
-            printf("-- cpuTime %d: %llu\n", c, cpuTime);
-        }
+        // for (int c = 0; c < stats->numCpus; c++) {
+        //     cpuTime = *(stats->times + stats->numCpus * i + c);
+        //     printf("-- cpuTime %d: %llu\n", c, cpuTime);
+        // }
     }
 
     return 0;
