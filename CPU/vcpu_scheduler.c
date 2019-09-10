@@ -206,52 +206,6 @@ int updateStats(CpuStats *stats, GuestList *guests)
     int c = 0; // cpu iterator
     int p = 0; // param iterator
     int paramPos = 0;
-    int rt = 0;
-    virDomainPtr domain = NULL;
-    virTypedParameterPtr params = NULL;
-    
-    check(stats, "stats is null");
-    check(guests, "guests is null");
- 
-    nparams = virDomainGetCPUStats(guestListDomainAt(guests, 0), NULL, 0, 0, 1, 0);
-    check(nparams >= 0, "failed to get domain cpu params");
-    params = calloc(stats->numCpus * nparams, sizeof(virTypedParameter));
-    check(params, "failed to allocated params");
-
-    for (d = 0; d < guests->count; d++) {
-        domain = guestListDomainAt(guests, d);
-        virDomainGetCPUStats(domain, params, nparams, 0, stats->numCpus, 0);
-
-        for (c = 0; c < stats->numCpus; c++) {
-            for (p = 0; p < nparams; p++) {
-                paramPos = nparams * c + p;
-
-                if (strncmp(params[paramPos].field, "vcpu_time", VIR_TYPED_PARAM_FIELD_LENGTH) == 0) {
-                    CpuStatsSetTime(stats, c, d, params[paramPos].value.ul);
-                }
-            }
-        }
-    }
-
-    rt = 0;
-    goto final;
-
-error:
-    rt = -1;
-final:
-    if (params) {
-        free(params);
-    }
-    return rt;
-}
-
-int computeUsage(CpuStats *stats, GuestList *guests)
-{
-    int nparams = 0;
-    int d = 0; // domain iterator
-    int c = 0; // cpu iterator
-    int p = 0; // param iterator
-    int paramPos = 0;
     unsigned long long prevTime = 0L;
     unsigned long long currTime = 0L;
     unsigned long long timeDiff = 0L;
@@ -282,7 +236,7 @@ int computeUsage(CpuStats *stats, GuestList *guests)
                     rt = CpuStatsGetTime(stats, c, d, &prevTime);
                     check(rt == 0, "failed to get cpu time from stats");
                     currTime = params[paramPos].value.ul;
-                    timeDiff = currTime - prevTime;
+                    timeDiff = prevTime > 0 ? currTime - prevTime : 0;
                     printf("--- cpu %d, domain %d, cur time %llu prev time %llu diff %llu\n",
                         c, d, currTime, prevTime, timeDiff);
                     rt = CpuStatsAddUsage(stats, c, timeDiff);
@@ -356,7 +310,7 @@ int main(int argc, char *argv[])
     // }
 
     sleep(2);
-    computeUsage(stats, guests);
+    updateStats(stats, guests);
     CpuStatsPrint(stats);
 
     guestListFree(guests);
