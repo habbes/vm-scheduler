@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <math.h>
+#include <limits.h>
 #include <libvirt/libvirt.h>
 
 #define check(C, M) if (!(C)) {fprintf(stderr, (M)); fprintf(stderr, "\n"); goto error;}
@@ -326,12 +327,68 @@ final:
     return rt;
 }
 
+int countBits(unsigned char byte, int maxBits)
+{
+    maxBits = maxBits > 8 ? 8 : maxBits;
+    int bits = 0;
+    int i = 0;
+    for (i = 0; i < maxBits; i++) {
+        bits += byte & 1;
+        byte >>= 1;
+    }
+    return bits;
+}
+
+#define isPinnedToCpu(cpuMap, targetCpuMask) (((cpuMap) & (targetCpuMask)) == (targetCpuMask))
+#define getCpuMask(cpu) ((unsigned char) 1 << cpu);
+
+int getDomainToUnpinFromCpu(unsigned char *cpuMaps, int numDomains, unsigned char cpumask, int numCpus)
+{
+    int d = 0;
+    int domain = -1;
+    int maxPins = INT_MIN;
+    int pins = 0;
+    checkNull(cpuMaps);
+
+    for (d = 0; d < numDomains; d++) {
+        pins = countBits(cpuMaps[d], numCpus);
+        if ((pins > maxPins ) && (isPinnedToCpu(cpuMaps[d], cpumask))) {
+            maxPins = pins;
+            domain = d;
+        }
+    }
+    return domain;
+
+error:
+    return -1;
+}
+
+int getDomainToPinToCpu(unsigned char *cpuMaps, int numDomains, unsigned char cpumask, int numCpus)
+{
+    int d = 0;
+    int domain = -1;
+    int minPins = INT_MAX;
+    int pins = 0;
+    checkNull(cpuMaps);
+
+    for (d = 0; d < numDomains; d++) {
+        pins = countBits(cpuMaps[d], numCpus);
+        if ((pins < minPins) && !(isPinnedToCpu(cpuMaps[d], cpumask))) {
+            minPins = pins;
+            domain = d;
+        }
+    }
+    return domain;
+
+error:
+    return -1;
+}
+
 int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targetDiffs)
 {
     int rt = 0;
     int targetDiff = 0;
     unsigned char cpumap = 0;
-    unsigned char newCpumap = 0;
     unsigned char *newCpuMaps = NULL;
     virDomainPtr domain = NULL;
     unsigned char cpumask = 0;
@@ -345,40 +402,34 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
 
     newCpuMaps = calloc(guests->count, sizeof(unsigned char));
 
+    for (int d = 0; d < guests->count; d++) {
+        domain = guestListDomainAt(guests, d);
+        rt = virDomainGetVcpuPinInfo(domain, 1, &cpumap, 1, 0);
+        newCpuMaps[d] = cpumap;
+        check(rt != -1, "failed to get vcpu pin info");
+    }
+
     for (int i = 0; i < stats->numCpus; i++)
     {
         opcount = 0;
-        cpumask = (unsigned char) 1 << i;
+        cpumask = getCpuMask(i);
         targetDiff = targetDiffs[i];
         targetOps = abs(targetDiff);
 
-        for (int d = 0; d < guests->count; d++) {
-            domain = guestListDomainAt(guests, d);
-            rt = virDomainGetVcpuPinInfo(domain, 1, &cpumap, 1, 0);
-            newCpuMaps[d] = cpumap;
-            check(rt != -1, "failed to get vcpu pin info");
-        }
- 
-        for (int d = 0; d < guests->count; d++) {
-            domain = guestListDomainAt(guests, d);
-            cpumap = newCpuMaps[d];
-
-            if ((cpumap & cpumask) == cpumask) {
-                // domain is pinned to cpu
-                if (targetDiff < 0 && opcount < targetOps) {
-                    // unpin cpu
-                    newCpuMaps[d] = newCpuMaps[d] & (~cpumask);
-                    printf("to unpin domain %d from cpu %i, old map %X new map %X\n", d, i, cpumap, newCpuMaps[d]);
-                    ++opcount;
-                }
+        while (opcount < targetOps) {
+            if (targetDiff < 0) {
+                int d = getDomainToUnpinFromCpu(newCpuMaps, guests->count, cpumask, stats->numCpus);
+                // unpin cpu
+                newCpuMaps[d] = newCpuMaps[d] & (~cpumask);
+                printf("to unpin domain %d from cpu %i, old map 0x%X new map 0x%X\n", d, i, cpumap, newCpuMaps[d]);
+                ++opcount;
             }
-            else {
-                if (targetDiff > 0 && opcount < targetOps) {
-                    // pin cpu
-                    newCpuMaps[d] = newCpuMaps[d] | cpumask;
-                    printf("to pin domain %d from cpu %i, old map %X new map %X\n", d, i, cpumap, newCpuMaps[d]);
-                    ++opcount;
-                }
+            if (targetDiff > 0) {
+                int d = getDomainToPinToCpu(newCpuMaps, guests->count, cpumask, stats->numCpus);
+                // pin cpu
+                newCpuMaps[d] = newCpuMaps[d] | cpumask;
+                printf("to pin domain %d to cpu %i, old map 0x%X new map 0x%X\n", d, i, cpumap, newCpuMaps[d]);
+                ++opcount;
             }
         }
     }
