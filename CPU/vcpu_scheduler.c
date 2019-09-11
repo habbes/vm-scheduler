@@ -419,6 +419,7 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
         while (opcount < targetOps) {
             if (targetDiff < 0) {
                 int d = getDomainToUnpinFromCpu(newCpuMaps, guests->count, cpumask, stats->numCpus);
+                check(d >= 0, "did not find domain to unpin");
                 // unpin cpu
                 newCpuMaps[d] = newCpuMaps[d] & (~cpumask);
                 printf("to unpin domain %d from cpu %i, old map 0x%X new map 0x%X\n", d, i, cpumap, newCpuMaps[d]);
@@ -426,6 +427,7 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
             }
             if (targetDiff > 0) {
                 int d = getDomainToPinToCpu(newCpuMaps, guests->count, cpumask, stats->numCpus);
+                check(d >= 0, "did not find domain to unpin");
                 // pin cpu
                 newCpuMaps[d] = newCpuMaps[d] | cpumask;
                 printf("to pin domain %d to cpu %i, old map 0x%X new map 0x%X\n", d, i, cpumap, newCpuMaps[d]);
@@ -496,11 +498,15 @@ final:
 
 int main(int argc, char *argv[])
 {
+    int interval = 0;
     char * uri = "qemu:///system";
     virConnectPtr conn = NULL;
     GuestList *guests = NULL;
     CpuStats *stats = NULL;
     int rt = 0;
+
+    check(argc > 1, "interval arg required, usage: ./cpu_scheduler <interval>");
+    interval = atoi(argv[1]);
 
     conn = virConnectOpen(uri);
     check(conn, "Failed to connect to host");
@@ -522,6 +528,17 @@ int main(int argc, char *argv[])
 
     rt = allocateCpus(conn, stats, guests);
     check(rt == 0, "error allocating cpus");
+
+    while (1) {
+        puts("sleeping...");
+        sleep(interval);
+        puts("scheduling...");
+        rt = updateStats(stats, guests, interval);
+        check(rt == 0, "error updating stats");
+        rt = allocateCpus(conn, stats, guests);
+        check(rt == 0, "error allocating cpus");
+        puts("scheduling cycle done\n");
+    }
 
     // unsigned char cpumap = 0x0f;
     // for (int d = 0; d < guests->count; d++) {

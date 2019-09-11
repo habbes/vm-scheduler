@@ -2,7 +2,7 @@ CFLAGS=-g -Wall
 all: vcpu_scheduler
 
 run: vcpu_scheduler
-	./$<
+	./$< 5
 
 memcheckv: vcpu_scheduler
 	valgrind --leak-check=full --show-leak-kinds=all ./$<
