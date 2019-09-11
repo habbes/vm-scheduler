@@ -400,7 +400,9 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
 error:
     rt = -1;
 final:
-
+    if (newCpuMaps) {
+        free(newCpuMaps);
+    }
     return rt;
 }
 
