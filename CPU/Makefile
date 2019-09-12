@@ -1,4 +1,10 @@
-CFLAGS=-g -Wall -D_GNU_SOURCE
+CFLAGS =-g -Wall -D_GNU_SOURCE
+
+SRC = $(wildcard *.c)
+OBJ = $(SRC:.c=.o)
+
+LDFALGS = -lvirt -lm
+
 all: vcpu_scheduler
 
 run: vcpu_scheduler
@@ -10,8 +16,9 @@ memcheckv: vcpu_scheduler
 memcheck: vcpu_scheduler
 	valgrind --leak-check=summary ./$< 5
 
-vcpu_scheduler: vcpu_scheduler.c
-	$(CC) $(CFLAGS) $< -o $@ -lvirt -lm
+vcpu_scheduler: $(OBJ)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFALGS)
 
+.PHONY: clean
 clean:
-	rm -rf vcpu_scheduler
+	rm -rf $(OBJ) vcpu_scheduler

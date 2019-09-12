@@ -1,2 +1,3 @@
 CPU/vcpu_scheduler
+CPU/*.o
 Memory/memory_coordinator
