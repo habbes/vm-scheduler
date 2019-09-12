@@ -384,9 +384,9 @@ error:
     return -1;
 }
 
-int cpuComparer(int *cpu1Ptr, int *cpu2Ptr, int *targetDiffs) {
-    int diff1 = targetDiffs[(*cpu1Ptr)];
-    int diff2 = targetDiffs[(*cpu2Ptr)];
+int cpuComparer(const void *cpu1Ptr, const void *cpu2Ptr, void *targetDiffs) {
+    int diff1 = ((int *)targetDiffs)[(*(int *)cpu1Ptr)];
+    int diff2 = ((int *)targetDiffs)[(*(int *)cpu2Ptr)];
     return diff1 - diff2;
 }
 
@@ -394,7 +394,7 @@ int sortCpusByDiffs(int *cpus, int *targetDiffs, int numCpus)
 {
     checkNull(cpus);
     checkNull(targetDiffs);
-    qsort_r(cpus, numCpus, sizeof(int), cpuComparer, targetDiffs);
+    qsort_r(cpus, numCpus, sizeof(int), cpuComparer, (void *) targetDiffs);
 
     return 0;
 error:
@@ -424,6 +424,11 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
     cpus = malloc(sizeof(int) * stats->numCpus);
     checkMemAlloc(cpus);
 
+    for (int i = 0; i < stats->numCpus; i++) {
+        cpus[i] = i;
+    }
+
+
     rt = sortCpusByDiffs(cpus, targetDiffs, stats->numCpus);
     check(rt == 0, "failed to sort cpus");
     printf("sorted cpus:\n");
@@ -431,10 +436,6 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
         printf("cpu %d:%d, ", cpus[i], targetDiffs[cpus[i]]);
     }
     puts("\n");
-
-    for (int i = 0; i < stats->numCpus; i++) {
-        cpus[i] = i;
-    }
 
     for (int d = 0; d < guests->count; d++) {
         domain = guestListDomainAt(guests, d);

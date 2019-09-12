@@ -1,4 +1,4 @@
-CFLAGS=-g -Wall
+CFLAGS=-g -Wall -D_GNU_SOURCE
 all: vcpu_scheduler
 
 run: vcpu_scheduler
@@ -8,7 +8,7 @@ memcheckv: vcpu_scheduler
 	valgrind --leak-check=full --show-leak-kinds=all ./$<
 
 memcheck: vcpu_scheduler
-	valgrind --leak-check=summary ./$<
+	valgrind --leak-check=summary ./$< 5
 
 vcpu_scheduler: vcpu_scheduler.c
 	$(CC) $(CFLAGS) $< -o $@ -lvirt -lm
