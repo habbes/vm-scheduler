@@ -384,12 +384,31 @@ error:
     return -1;
 }
 
+int cpuComparer(int *cpu1Ptr, int *cpu2Ptr, int *targetDiffs) {
+    int diff1 = targetDiffs[(*cpu1Ptr)];
+    int diff2 = targetDiffs[(*cpu2Ptr)];
+    return diff1 - diff2;
+}
+
+int sortCpusByDiffs(int *cpus, int *targetDiffs, int numCpus)
+{
+    checkNull(cpus);
+    checkNull(targetDiffs);
+    qsort_r(cpus, numCpus, sizeof(int), cpuComparer, targetDiffs);
+
+    return 0;
+error:
+    return -1;
+}
+
 int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targetDiffs)
 {
     int rt = 0;
     int targetDiff = 0;
     unsigned char cpumap = 0;
     unsigned char *newCpuMaps = NULL;
+    int *cpus = NULL;
+    int cpu = 0;
     virDomainPtr domain = NULL;
     unsigned char cpumask = 0;
     int opcount = 0;
@@ -401,6 +420,21 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
     checkNull(targetDiffs);
 
     newCpuMaps = calloc(guests->count, sizeof(unsigned char));
+    checkMemAlloc(newCpuMaps);
+    cpus = malloc(sizeof(int) * stats->numCpus);
+    checkMemAlloc(cpus);
+
+    rt = sortCpusByDiffs(cpus, targetDiffs, stats->numCpus);
+    check(rt == 0, "failed to sort cpus");
+    printf("sorted cpus:\n");
+    for (int i = 0; i < stats->numCpus; i++) {
+        printf("cpu %d:%d, ", cpus[i], targetDiffs[cpus[i]]);
+    }
+    puts("\n");
+
+    for (int i = 0; i < stats->numCpus; i++) {
+        cpus[i] = i;
+    }
 
     for (int d = 0; d < guests->count; d++) {
         domain = guestListDomainAt(guests, d);
@@ -411,9 +445,10 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
 
     for (int i = 0; i < stats->numCpus; i++)
     {
+        cpu = cpus[i];
         opcount = 0;
-        cpumask = getCpuMask(i);
-        targetDiff = targetDiffs[i];
+        cpumask = getCpuMask(cpu);
+        targetDiff = targetDiffs[cpu];
         targetOps = abs(targetDiff);
 
         while (opcount < targetOps) {
@@ -422,7 +457,7 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
                 check(d >= 0, "did not find domain to unpin");
                 // unpin cpu
                 newCpuMaps[d] = newCpuMaps[d] & (~cpumask);
-                printf("to unpin domain %d from cpu %i, old map 0x%X new map 0x%X\n", d, i, cpumap, newCpuMaps[d]);
+                printf("to unpin domain %d from cpu %i, old map 0x%X new map 0x%X\n", d, cpu, cpumap, newCpuMaps[d]);
                 ++opcount;
             }
             if (targetDiff > 0) {
@@ -430,7 +465,7 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
                 check(d >= 0, "did not find domain to unpin");
                 // pin cpu
                 newCpuMaps[d] = newCpuMaps[d] | cpumask;
-                printf("to pin domain %d to cpu %i, old map 0x%X new map 0x%X\n", d, i, cpumap, newCpuMaps[d]);
+                printf("to pin domain %d to cpu %i, old map 0x%X new map 0x%X\n", d, cpu, cpumap, newCpuMaps[d]);
                 ++opcount;
             }
         }
@@ -455,6 +490,9 @@ error:
 final:
     if (newCpuMaps) {
         free(newCpuMaps);
+    }
+    if (cpus) {
+        free(cpus);
     }
     return rt;
 }
