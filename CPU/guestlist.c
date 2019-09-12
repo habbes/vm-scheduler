@@ -3,7 +3,7 @@
 #include "check.h"
 #include "guestlist.h"
 
-GuestList *guestListGet(virConnectPtr conn)
+GuestList *GuestListGet(virConnectPtr conn)
 {
     int i = 0;
     int numDomains = 0;
@@ -40,7 +40,7 @@ error:
     return NULL;
 }
 
-void guestListFree(GuestList *gl) {
+void GuestListFree(GuestList *gl) {
     int i =  0;
     if (!gl) {
         return;
@@ -57,12 +57,12 @@ void guestListFree(GuestList *gl) {
     free(gl);
 }
 
-virDomainPtr guestListDomainAt(GuestList *gl, int i)
+virDomainPtr GuestListDomainAt(GuestList *gl, int i)
 {
     return gl->domains[i];
 }
 
-int guestListIdAt(GuestList *gl, int i)
+int GuestListIdAt(GuestList *gl, int i)
 {
     return gl->ids[i];
 }

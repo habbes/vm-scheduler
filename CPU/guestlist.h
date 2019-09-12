@@ -15,9 +15,9 @@ typedef struct GuestList {
 } GuestList;
 
 
-GuestList *guestListGet(virConnectPtr conn);
-void guestListFree(GuestList *gl);
-virDomainPtr guestListDomainAt(GuestList *gl, int i);
-int guestListIdAt(GuestList *gl, int i);
+GuestList *GuestListGet(virConnectPtr conn);
+void GuestListFree(GuestList *gl);
+virDomainPtr GuestListDomainAt(GuestList *gl, int i);
+int GuestListIdAt(GuestList *gl, int i);
 
 #endif

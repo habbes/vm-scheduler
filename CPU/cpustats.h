@@ -27,6 +27,12 @@ typedef struct CpuStats {
 #define CpuStatsGetUsage(stats, cpu) ((stats)->usages[(cpu)])
 #define CpuStatsGetCpuWeight(stats, cpu) ((stats)->cpuWeights[(cpu)])
 
+/**
+ * creates cpu stats object
+ * @param cpus number of cpus
+ * @param domains number of domains
+ * @return pointer to stats object. Created object should be freed using CpuStatsFree()
+ */
 CpuStats *CpuStatsCreate(int cpus, int domains);
 void CpuStatsFree(CpuStats *);
 int CpuStatsSetTime(CpuStats *stats, int cpu, int domain, CpuStatsTime_t time);
