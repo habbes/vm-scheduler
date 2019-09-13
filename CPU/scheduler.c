@@ -102,7 +102,16 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
     }
     puts("\n");
 
-    memcpy(newCpuMaps, stats->cpuMaps, sizeof(unsigned char) * stats->numDomains);
+    // TODO consider directly modifying stats->cpuMaps instead of cloning it
+    // memcpy(newCpuMaps, stats->cpuMaps, sizeof(unsigned char) * stats->numDomains);
+
+    for (int d = 0; d < stats->numDomains; d++) {
+        domain = GuestListDomainAt(guests, d);
+        rt = virDomainGetVcpuPinInfo(domain, 1, &cpumap, 1, 0);
+        check(rt != -1, "failed to get vcpu pin info");
+        printf("new cpu maps %d - 0x%X\n", d, newCpuMaps[d]);
+        newCpuMaps[d] = cpumap;
+    }
 
     for (int i = 0; i < stats->numCpus; i++)
     {
@@ -192,7 +201,7 @@ int computeTargetDiffsUsingGuestCount(CpuStats *stats, int *targetDiffs)
 
     for (int i = 0; i < stats->numCpus; i++) {
         pinnedDomains = CpuStatsCountDomainsOnCpu(stats, i);
-        targetDiffs[i] = pinnedDomains - targetCount;
+        targetDiffs[i] = targetCount - pinnedDomains;
     }
 
     return 0;
@@ -213,7 +222,8 @@ int allocateCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests)
     targetDiffs = calloc(stats->numCpus, sizeof(int));
     checkMemAlloc(targetDiffs);
 
-    rt = computeTargetDiffsUsingWeight(stats, targetDiffs);
+    // rt = computeTargetDiffsUsingWeight(stats, targetDiffs);
+    rt = computeTargetDiffsUsingGuestCount(stats, targetDiffs);
     check(rt == 0, "could not compute target diffs");
 
     repinCpus(conn, stats, guests, targetDiffs);
