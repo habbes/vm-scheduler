@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
     check(rt == 0, "error updating stats");
     CpuStatsPrint(stats);
 
-    rt = allocateCpus(conn, stats, guests);
+    rt = allocateCpus(stats, guests);
     check(rt == 0, "error allocating cpus");
 
     while (1) {
@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
         puts("scheduling...");
         rt = updateStats(stats, guests, interval);
         check(rt == 0, "error updating stats");
-        rt = allocateCpus(conn, stats, guests);
+        rt = allocateCpus(stats, guests);
         check(rt == 0, "error allocating cpus");
         puts("scheduling cycle done\n");
     }

@@ -4,9 +4,7 @@
 #include "cpustats.h"
 #include "guestlist.h"
 
-int getDomainToUnpinFromCpu(unsigned char *cpuMaps, int numDomains, unsigned char cpumask, int numCpus);
-int getDomainToPinToCpu(unsigned char *cpuMaps, int numDomains, unsigned char cpumask, int numCpus);
-int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targetDiffs);
-int allocateCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests);
+int repinCpus(CpuStats *stats, GuestList *guests, CpuStatsUsage_t *targetWeights);
+int allocateCpus(CpuStats *stats, GuestList *guests);
 
 #endif

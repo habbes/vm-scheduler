@@ -11,7 +11,7 @@
  * 
  * @return the number of 1 bits found
  */
-int countBits(unsigned char byte, int maxBits);
+int countOnBits(unsigned char byte, int maxBits);
 
 /**
  * sort the elements of the array `ids` in ascending order based on their

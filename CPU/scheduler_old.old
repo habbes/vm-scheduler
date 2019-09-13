@@ -15,7 +15,7 @@ int getDomainToUnpinFromCpu(unsigned char *cpuMaps, int numDomains, unsigned cha
     checkNull(cpuMaps);
 
     for (d = 0; d < numDomains; d++) {
-        pins = countBits(cpuMaps[d], numCpus);
+        pins = countOnBits(cpuMaps[d], numCpus);
         if ((pins > maxPins ) && (isPinnedToCpu(cpuMaps[d], cpumask))) {
             maxPins = pins;
             domain = d;
@@ -36,7 +36,7 @@ int getDomainToPinToCpu(unsigned char *cpuMaps, int numDomains, unsigned char cp
     checkNull(cpuMaps);
 
     for (d = 0; d < numDomains; d++) {
-        pins = countBits(cpuMaps[d], numCpus);
+        pins = countOnBits(cpuMaps[d], numCpus);
         if ((pins < minPins) && !(isPinnedToCpu(cpuMaps[d], cpumask))) {
             minPins = pins;
             domain = d;

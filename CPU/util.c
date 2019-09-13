@@ -2,7 +2,7 @@
 #include "check.h"
 #include "util.h"
 
-int countBits(unsigned char byte, int maxBits)
+int countOnBits(unsigned char byte, int maxBits)
 {
     maxBits = maxBits > 8 ? 8 : maxBits;
     int bits = 0;
