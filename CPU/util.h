@@ -2,7 +2,7 @@
 #define util_h
 
 #define isPinnedToCpu(cpuMap, targetCpuMask) (((cpuMap) & (targetCpuMask)) == (targetCpuMask))
-#define getCpuMask(cpu) ((unsigned char) 1 << cpu);
+#define getCpuMask(cpu) ((unsigned char) 1 << cpu)
 
 /**
  * count the number of bits in `byte` that are set

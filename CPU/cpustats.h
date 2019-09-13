@@ -2,6 +2,7 @@
 #define cpustats_h
 
 #include "check.h"
+#include "guestlist.h"
 
 typedef long double CpuStatsUsage_t;
 typedef unsigned long long CpuStatsTime_t;
@@ -14,6 +15,7 @@ typedef struct CpuStats {
     CpuStatsUsage_t *domainUsages;
     CpuStatsWeight_t *cpuWeights;
     CpuStatsTime_t *times;
+    unsigned char *cpuMaps;
 } CpuStats;
 
 #define CpuStatsCheckStatsArg(stats) check(stats, "stats is null")
@@ -40,7 +42,10 @@ int CpuStatsGetTime(CpuStats *stats, int cpu, int domain, CpuStatsTime_t *timePt
 int CpuStatsResetUsages(CpuStats *stats);
 int CpuStatsAddUsage(CpuStats *stats, int cpu, CpuStatsUsage_t usage);
 int CpuStatsAddDomainUsage(CpuStats *stats, int domain, CpuStatsUsage_t usage);
+int CpuStatsCountDomainsOnCpu(CpuStats *stats, int cpu);
 int CpuStatsUsagesToPct(CpuStats *stats, double timeInterval);
 int CpuStatsPrint(CpuStats *stats);
+int CpuStatsUpdateCpuMaps(CpuStats *stats, GuestList *guests);
+int updateStats(CpuStats *stats, GuestList *guests, int timeInterval);
 
 #endif

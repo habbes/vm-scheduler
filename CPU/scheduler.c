@@ -6,70 +6,6 @@
 #include "scheduler.h"
 #include "util.h"
 
-int updateStats(CpuStats *stats, GuestList *guests, int timeInterval)
-{
-    int nparams = 0;
-    int d = 0; // domain iterator
-    int c = 0; // cpu iterator
-    int p = 0; // param iterator
-    int paramPos = 0;
-    unsigned long long prevTime = 0L;
-    unsigned long long currTime = 0L;
-    unsigned long long timeDiff = 0L;
-    int rt = 0;
-    virDomainPtr domain = NULL;
-    virTypedParameterPtr params = NULL;
-
-    check(stats, "stats is null");
-    check(guests, "guests is null");
- 
-    nparams = virDomainGetCPUStats(GuestListDomainAt(guests, 0), NULL, 0, 0, 1, 0);
-    check(nparams >= 0, "failed to get domain cpu params");
-    params = calloc(stats->numCpus * nparams, sizeof(virTypedParameter));
-    check(params, "failed to allocated params");
-
-    rt = CpuStatsResetUsages(stats);
-    check(rt == 0, "failed to reset usages");
-
-    for (d = 0; d < guests->count; d++) {
-        domain = GuestListDomainAt(guests, d);
-        virDomainGetCPUStats(domain, params, nparams, 0, stats->numCpus, 0);
-
-        for (c = 0; c < stats->numCpus; c++) {
-            for (p = 0; p < nparams; p++) {
-                paramPos = nparams * c + p;
-
-                if (strncmp(params[paramPos].field, "vcpu_time", VIR_TYPED_PARAM_FIELD_LENGTH) == 0) {
-                    rt = CpuStatsGetTime(stats, c, d, &prevTime);
-                    check(rt == 0, "failed to get cpu time from stats");
-                    currTime = params[paramPos].value.ul;
-                    timeDiff = prevTime > 0 ? currTime - prevTime : 0;
-                    rt = CpuStatsAddUsage(stats, c, (CpuStatsUsage_t) timeDiff);
-                    check(rt == 0, "failed to add cpu usage");
-                    rt = CpuStatsAddDomainUsage(stats, d, (CpuStatsUsage_t) timeDiff);
-                    check(rt == 0, "failed to add domain usage");
-                    rt = CpuStatsSetTime(stats, c, d, currTime);
-                    check(rt == 0, "failed to updated cpu time");
-                }
-            }
-        }
-    }
-
-    rt = CpuStatsUsagesToPct(stats, timeInterval);
-    check(rt == 0, "failed to updated usages");
-
-    rt = 0;
-    goto final;
-
-error:
-    rt = -1;
-final:
-    if (params) {
-        free(params);
-    }
-    return rt;
-}
-
 int getDomainToUnpinFromCpu(unsigned char *cpuMaps, int numDomains, unsigned char cpumask, int numCpus)
 {
     int d = 0;
@@ -166,12 +102,7 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
     }
     puts("\n");
 
-    for (int d = 0; d < guests->count; d++) {
-        domain = GuestListDomainAt(guests, d);
-        rt = virDomainGetVcpuPinInfo(domain, 1, &cpumap, 1, 0);
-        newCpuMaps[d] = cpumap;
-        check(rt != -1, "failed to get vcpu pin info");
-    }
+    memcpy(newCpuMaps, stats->cpuMaps, sizeof(unsigned char) * stats->numDomains);
 
     for (int i = 0; i < stats->numCpus; i++)
     {
@@ -204,10 +135,8 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
     for (int d = 0; d < guests->count; d++) {
         domain = GuestListDomainAt(guests, d);
         cpumap = newCpuMaps[d];
-        if (cpumap == 0) {
-            cpumap = 1;
-        }
-        printf("domain %d new pin 0x%X - 0x%X\n", d, cpumap, newCpuMaps[d]);
+        printf("domain %d new pin 0x%X - old 0x%X\n", d, newCpuMaps[d], stats->cpuMaps[d]);
+        check(newCpuMaps[d] != 0, "did not assign any cpu to domain");
         rt = virDomainPinVcpu(domain, 0, &cpumap, 1);
         check(rt != -1, "failed to repin vcpu");
     }
@@ -227,28 +156,65 @@ final:
     return rt;
 }
 
+int computeTargetDiffsUsingWeight(CpuStats *stats, int *targetDiffs)
+{
+    CpuStatsWeight_t targetWeight = 0.0;
+    CpuStatsWeight_t cpuWeight = 0.0;
+    CpuStatsWeight_t weightDiff = 0.0;
+
+    checkNull(stats);
+    checkNull(targetDiffs);
+
+    targetWeight = 1.0 / stats->numCpus;
+
+    for (int i = 0; i < stats->numCpus; i++) {
+        cpuWeight = CpuStatsGetCpuWeight(stats, i);
+        weightDiff = targetWeight - cpuWeight;
+        targetDiffs[i] = (int) roundl(weightDiff * stats->numDomains);
+        printf("cpu %d, vm diff %d\n", i, targetDiffs[i]);
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
+int computeTargetDiffsUsingGuestCount(CpuStats *stats, int *targetDiffs)
+{
+    int pinnedDomains = 0;
+    int targetCount = 0;
+
+    checkNull(stats);
+    checkNull(targetDiffs);
+
+    targetCount = (int) roundl(stats->numDomains / stats->numCpus);
+
+    for (int i = 0; i < stats->numCpus; i++) {
+        pinnedDomains = CpuStatsCountDomainsOnCpu(stats, i);
+        targetDiffs[i] = pinnedDomains - targetCount;
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
 int allocateCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests)
 {
     int rt = 0;
     int *targetDiffs = NULL;
-    CpuStatsWeight_t targetWeight = 0.0;
-    CpuStatsWeight_t cpuWeight = 0.0;
-    CpuStatsWeight_t weightDiff = 0.0;
 
     checkNull(conn);
     checkNull(stats);
     checkNull(guests);
 
-    targetWeight = 1.0 / stats->numCpus;
     targetDiffs = calloc(stats->numCpus, sizeof(int));
     checkMemAlloc(targetDiffs);
 
-    for (int i = 0; i < stats->numCpus; i++) {
-        cpuWeight = CpuStatsGetCpuWeight(stats, i);
-        weightDiff = targetWeight - cpuWeight;
-        targetDiffs[i] = (int) roundl(weightDiff * guests->count);
-        printf("cpu %d, vm diff %d\n", i, targetDiffs[i]);
-    }
+    rt = computeTargetDiffsUsingWeight(stats, targetDiffs);
+    check(rt == 0, "could not compute target diffs");
 
     repinCpus(conn, stats, guests, targetDiffs);
 

@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "cpustats.h"
+#include "util.h"
 
 CpuStats *CpuStatsCreate(int cpus, int domains)
 {
@@ -16,6 +17,8 @@ CpuStats *CpuStatsCreate(int cpus, int domains)
     checkMemAlloc(stats->times);
     stats->domainUsages = calloc(domains, sizeof(CpuStatsUsage_t));
     checkMemAlloc(stats->domainUsages);
+    stats->cpuMaps = calloc(domains, sizeof(unsigned char));
+    checkMemAlloc(stats->cpuMaps);
 
     return stats;
 
@@ -38,6 +41,9 @@ void CpuStatsFree(CpuStats *stats)
         }
         if (stats->cpuWeights) {
             free(stats->cpuWeights);
+        }
+        if (stats->cpuMaps) {
+            free(stats->cpuMaps);
         }
         free(stats);
     }
@@ -151,5 +157,109 @@ error:
     return -1;
 }
 
+int CpuStatsCountDomainsOnCpu(CpuStats *stats, int cpu)
+{
+    CpuStatsCheckStatsArg(stats);
+    CpuStatsCheckCpuArg(cpu);
+    int count = 0;
+    int d = 0;
 
+    for (d = 0; d < stats->numDomains; d++) {
+        if (isPinnedToCpu(stats->cpuMaps[d], getCpuMask(cpu))) {
+            ++count;
+        }
+    }
 
+    return count;
+
+error:
+    return -1;
+}
+
+int CpuStatsUpdateCpuMaps(CpuStats *stats, GuestList *guests)
+{
+    virDomainPtr domain = NULL;
+    unsigned char cpumap = 0;
+    int rt = 0;
+    checkNull(stats);
+    checkNull(guests);
+
+    for (int i = 0; i < guests->count; i++) {
+        domain = GuestListDomainAt(guests, i);
+        rt = virDomainGetVcpuPinInfo(domain, 1, &cpumap, 1, 0);
+        check(rt != -1, "failed to get vcpu pin info");
+        stats->cpuMaps[i] = cpumap;
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
+int updateStats(CpuStats *stats, GuestList *guests, int timeInterval)
+{
+    int nparams = 0;
+    int d = 0; // domain iterator
+    int c = 0; // cpu iterator
+    int p = 0; // param iterator
+    int paramPos = 0;
+    unsigned long long prevTime = 0L;
+    unsigned long long currTime = 0L;
+    unsigned long long timeDiff = 0L;
+    int rt = 0;
+    virDomainPtr domain = NULL;
+    virTypedParameterPtr params = NULL;
+
+    check(stats, "stats is null");
+    check(guests, "guests is null");
+ 
+    nparams = virDomainGetCPUStats(GuestListDomainAt(guests, 0), NULL, 0, 0, 1, 0);
+    check(nparams >= 0, "failed to get domain cpu params");
+    params = calloc(stats->numCpus * nparams, sizeof(virTypedParameter));
+    check(params, "failed to allocated params");
+
+    rt = CpuStatsResetUsages(stats);
+    check(rt == 0, "failed to reset usages");
+
+    rt = CpuStatsUpdateCpuMaps(stats, guests);
+    check(rt == 0, "failed to update cpu maps");
+
+    for (d = 0; d < guests->count; d++) {
+        domain = GuestListDomainAt(guests, d);
+        virDomainGetCPUStats(domain, params, nparams, 0, stats->numCpus, 0);
+
+        for (c = 0; c < stats->numCpus; c++) {
+            for (p = 0; p < nparams; p++) {
+                paramPos = nparams * c + p;
+
+                if (strncmp(params[paramPos].field, "vcpu_time", VIR_TYPED_PARAM_FIELD_LENGTH) == 0) {
+                    rt = CpuStatsGetTime(stats, c, d, &prevTime);
+                    check(rt == 0, "failed to get cpu time from stats");
+                    currTime = params[paramPos].value.ul;
+                    timeDiff = prevTime > 0 ? currTime - prevTime : 0;
+                    rt = CpuStatsAddUsage(stats, c, (CpuStatsUsage_t) timeDiff);
+                    check(rt == 0, "failed to add cpu usage");
+                    rt = CpuStatsAddDomainUsage(stats, d, (CpuStatsUsage_t) timeDiff);
+                    check(rt == 0, "failed to add domain usage");
+                    rt = CpuStatsSetTime(stats, c, d, currTime);
+                    check(rt == 0, "failed to updated cpu time");
+                }
+            }
+        }
+    }
+
+    rt = CpuStatsUsagesToPct(stats, timeInterval);
+    check(rt == 0, "failed to updated usages");
+
+    rt = 0;
+    goto final;
+
+error:
+    rt = -1;
+final:
+    if (params) {
+        free(params);
+    }
+    return rt;
+}
