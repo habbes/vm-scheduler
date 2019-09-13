@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include "cpustats.h"
 #include "util.h"
 
@@ -133,6 +134,7 @@ error:
     return -1;
 }
 
+
 int CpuStatsPrint(CpuStats *stats)
 {
     // CpuStatsTime_t cpuTime = 0;
@@ -171,6 +173,24 @@ int CpuStatsCountDomainsOnCpu(CpuStats *stats, int cpu)
     }
 
     return count;
+
+error:
+    return -1;
+}
+
+CpuStatsWeight_t CpuStatsCountDomainWeightOnCpu(CpuStats *stats, int cpu)
+{
+    CpuStatsWeight_t weight = 0;
+    int d = 0;
+    CpuStatsCheckStatsArg(stats);
+    CpuStatsCheckCpuArg(cpu);
+
+    for (d = 0; d < stats->numDomains; d++) {
+        if (isPinnedToCpu(stats->cpuMaps[d], getCpuMask(cpu))) {
+            weight += (CpuStatsWeight_t) stats->domainUsages[d];
+        }
+    }
+    return weight;
 
 error:
     return -1;
@@ -250,7 +270,7 @@ int updateStats(CpuStats *stats, GuestList *guests, int timeInterval)
     }
 
     rt = CpuStatsUsagesToPct(stats, timeInterval);
-    check(rt == 0, "failed to updated usages");
+    check(rt == 0, "failed to update usages");
 
     rt = 0;
     goto final;

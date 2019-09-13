@@ -43,6 +43,7 @@ int CpuStatsResetUsages(CpuStats *stats);
 int CpuStatsAddUsage(CpuStats *stats, int cpu, CpuStatsUsage_t usage);
 int CpuStatsAddDomainUsage(CpuStats *stats, int domain, CpuStatsUsage_t usage);
 int CpuStatsCountDomainsOnCpu(CpuStats *stats, int cpu);
+CpuStatsWeight_t CpuStatsCountDomainWeightOnCpu(CpuStats *stats, int cpu);
 int CpuStatsUsagesToPct(CpuStats *stats, double timeInterval);
 int CpuStatsPrint(CpuStats *stats);
 int CpuStatsUpdateCpuMaps(CpuStats *stats, GuestList *guests);

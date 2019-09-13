@@ -1,3 +1,5 @@
+#include <stdlib.h>
+#include "check.h"
 #include "util.h"
 
 int countBits(unsigned char byte, int maxBits)
@@ -10,4 +12,23 @@ int countBits(unsigned char byte, int maxBits)
         byte >>= 1;
     }
     return bits;
+}
+
+
+int valueComparer(const void *id1, const void *id2, void *values)
+{
+    int val1 = ((int *)values)[(*(int *)id1)];
+    int val2 = ((int *)values)[(*(int *)id2)];
+    return val1 - val2;
+}
+
+int sortIdsByValues(int *ids, int *values, int count)
+{
+    checkNull(ids);
+    checkNull(values);
+    qsort_r(ids, count, sizeof(int), valueComparer, (void *) values);
+
+    return 0;
+error:
+    return -1;
 }
