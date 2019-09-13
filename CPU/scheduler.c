@@ -103,15 +103,7 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
     puts("\n");
 
     // TODO consider directly modifying stats->cpuMaps instead of cloning it
-    // memcpy(newCpuMaps, stats->cpuMaps, sizeof(unsigned char) * stats->numDomains);
-
-    for (int d = 0; d < stats->numDomains; d++) {
-        domain = GuestListDomainAt(guests, d);
-        rt = virDomainGetVcpuPinInfo(domain, 1, &cpumap, 1, 0);
-        check(rt != -1, "failed to get vcpu pin info");
-        printf("new cpu maps %d - 0x%X\n", d, newCpuMaps[d]);
-        newCpuMaps[d] = cpumap;
-    }
+    memcpy(newCpuMaps, stats->cpuMaps, sizeof(unsigned char) * stats->numDomains);
 
     for (int i = 0; i < stats->numCpus; i++)
     {
