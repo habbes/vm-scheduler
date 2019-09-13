@@ -70,7 +70,6 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
 {
     int rt = 0;
     int targetDiff = 0;
-    unsigned char cpumap = 0;
     unsigned char *newCpuMaps = NULL;
     int *cpus = NULL;
     int cpu = 0;
@@ -119,7 +118,8 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
                 check(d >= 0, "did not find domain to unpin");
                 // unpin cpu
                 newCpuMaps[d] = newCpuMaps[d] & (~cpumask);
-                printf("to unpin domain %d from cpu %i, old map 0x%X new map 0x%X\n", d, cpu, cpumap, newCpuMaps[d]);
+                printf("to unpin domain %d from cpu %i, old map 0x%X new map 0x%X\n",
+                    d, cpu, stats->cpuMaps[d], newCpuMaps[d]);
                 ++opcount;
             }
             if (targetDiff > 0) {
@@ -127,7 +127,8 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
                 check(d >= 0, "did not find domain to unpin");
                 // pin cpu
                 newCpuMaps[d] = newCpuMaps[d] | cpumask;
-                printf("to pin domain %d to cpu %i, old map 0x%X new map 0x%X\n", d, cpu, cpumap, newCpuMaps[d]);
+                printf("to pin domain %d to cpu %i, old map 0x%X new map 0x%X\n",
+                    d, cpu, stats->cpuMaps[d], newCpuMaps[d]);
                 ++opcount;
             }
         }
@@ -135,11 +136,12 @@ int repinCpus(virConnectPtr conn, CpuStats *stats, GuestList *guests, int *targe
 
     for (int d = 0; d < guests->count; d++) {
         domain = GuestListDomainAt(guests, d);
-        cpumap = newCpuMaps[d];
-        printf("domain %d new pin 0x%X - old 0x%X\n", d, newCpuMaps[d], stats->cpuMaps[d]);
-        check(newCpuMaps[d] != 0, "did not assign any cpu to domain");
-        rt = virDomainPinVcpu(domain, 0, &cpumap, 1);
-        check(rt != -1, "failed to repin vcpu");
+        if (newCpuMaps[d] != stats->cpuMaps[d]) {
+            printf("domain %d new pin 0x%X - old 0x%X\n", d, newCpuMaps[d], stats->cpuMaps[d]);
+            check(newCpuMaps[d] != 0, "did not assign any cpu to domain");
+            rt = virDomainPinVcpu(domain, 0, newCpuMaps + d, 1);
+            check(rt != -1, "failed to repin vcpu");
+        }
     }
 
     rt = 0;
