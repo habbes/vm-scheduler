@@ -15,16 +15,6 @@
  */
 int countOnBits(unsigned char byte, int maxBits);
 
-/**
- * sort the elements of the array `ids` in ascending order based on their
- * corresponding values in `values`. `values[i]` corresponds
- * to `ids[i]`. `count` is the number of elements in each array.
- * 
- * NOTE: `ids` elements will be re-ordered by the sort operation, but
- * `values` will remain intact.
- */
-int sortIdsByValues(int *ids, int *values, int count);
-
 int almostEquals(double a, double b);
 int certainlyGreaterThan(double a, double b);
 
