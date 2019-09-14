@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <libvirt/libvirt.h>
 #include "check.h"
 #include "guestlist.h"
@@ -8,7 +9,29 @@
 #include "scheduler.h"
 #include "util.h"
 
+virConnectPtr conn = NULL;
+GuestList *guests = NULL;
+CpuStats *stats = NULL;
 
+void cleanUp()
+{
+    if (conn) {
+        virConnectClose(conn);
+    }
+    if (guests) {
+        GuestListFree(guests);
+    }
+    if (stats) {
+        CpuStatsFree(stats);
+    }
+}
+
+void sigintHandler(int sigNum)
+{
+    printf("Terminating due to keyboard interrupt...");
+    cleanUp();
+    exit(0);
+}
 
 int main(int argc, char *argv[])
 {
@@ -18,6 +41,8 @@ int main(int argc, char *argv[])
     GuestList *guests = NULL;
     CpuStats *stats = NULL;
     int rt = 0;
+
+    signal(SIGINT, sigintHandler);
 
     check(argc > 1, "interval arg required, usage: ./cpu_scheduler <interval>");
     interval = atoi(argv[1]);
@@ -46,20 +71,12 @@ int main(int argc, char *argv[])
         puts("scheduling cycle done\n");
     }
 
-    GuestListFree(guests);
-    CpuStatsFree(stats);
-    virConnectClose(conn);
+    rt = 0;
+    goto final;
 
-    return 0;
 error:
-    if (guests) {
-        GuestListFree(guests);
-    }
-    if (conn) {
-        virConnectClose(conn);
-    }
-    if (stats) {
-        CpuStatsFree(stats);
-    }
-    return 1;
+    rt = 1;
+final:
+    cleanUp();
+    return rt;
 }
