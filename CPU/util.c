@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <math.h>
 #include "check.h"
 #include "util.h"
 
@@ -31,4 +32,15 @@ int sortIdsByValues(int *ids, int *values, int count)
     return 0;
 error:
     return -1;
+}
+
+int almostEquals(double a, double b)
+{
+    double diff = a - b;
+    return fabs(diff) <= EQUALITY_PRECISION;
+}
+
+int certainlyGreaterThan(double a, double b) {
+    double diff = a - b;
+    return diff > EQUALITY_PRECISION;
 }

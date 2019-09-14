@@ -4,6 +4,8 @@
 #define isPinnedToCpu(cpuMap, targetCpuMask) (((cpuMap) & (targetCpuMask)) == (targetCpuMask))
 #define getCpuMask(cpu) ((unsigned char) 1 << cpu)
 
+#define EQUALITY_PRECISION 0.01
+
 /**
  * count the number of bits in `byte` that are set
  * to 1. Only the `maxBits` least significant
@@ -22,5 +24,8 @@ int countOnBits(unsigned char byte, int maxBits);
  * `values` will remain intact.
  */
 int sortIdsByValues(int *ids, int *values, int count);
+
+int almostEquals(double a, double b);
+int certainlyGreaterThan(double a, double b);
 
 #endif

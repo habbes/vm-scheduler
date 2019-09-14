@@ -29,34 +29,48 @@ error:
     return -1;
 }
 
-int getDomainToPinToCpu(unsigned char cpumask, unsigned char *newCpuMaps, CpuStatsUsage_t *targetWeights, CpuStats *stats)
+int getDomainToPinToCpu(unsigned char cpumask, unsigned char *newCpuMaps, CpuStatsUsage_t targetWeight, CpuStats *stats)
 {
     int d = 0;
     int curDomain = -1;
-    CpuStatsUsage_t curWeight = 0;
+    CpuStatsUsage_t curWeight = -1;
     CpuStatsUsage_t weight = 0;
+    int curPins = INT_MAX;
     
     checkNull(newCpuMaps);
     checkNull(stats);
-    checkNull(targetWeights);
 
     for (d = 0; d < stats->numDomains; d++) {
         weight = stats->domainUsages[d];
-        if (weight > targetWeights[d]) {
+        curWeight = curDomain > -1 ? stats->domainUsages[curDomain] : -1;
+        curPins = curDomain > -1 ? countOnBits(newCpuMaps[curDomain], stats->numCpus) : INT_MAX;
+        
+        // skip domains with large weight than cpu target weight
+        if (certainlyGreaterThan((double) weight, (double) targetWeight)) {
             continue;
         }
         if (isPinnedToCpu(newCpuMaps[d], cpumask)) {
             continue;
         }
-        if (weight > curWeight) {
+        // take the domain with the higher weight
+        if (certainlyGreaterThan((double) weight, (double) curWeight) &&
+            (countOnBits(newCpuMaps[d], stats->numCpus) <= curPins)
+        ) {
             curDomain = d;
             continue;
         }
-        if ((weight == curWeight) && (
+        // if domains have same weight, prefer domain which is already pinned to the cpu
+        // to avoid pin changes, or the domain with fewer new mappings to other cpus
+        if ((almostEquals((double) weight, (double) curWeight)) && (
             (isPinnedToCpu(stats->cpuMaps[d], cpumask) > isPinnedToCpu(stats->cpuMaps[curDomain], cpumask))
             ||
             (countOnBits(newCpuMaps[d], stats->numCpus) < countOnBits(newCpuMaps[curDomain], stats->numCpus))
         )) {
+            curDomain = d;
+            continue;
+        }
+
+        if (curDomain < 0) {
             curDomain = d;
             continue;
         }
@@ -76,13 +90,15 @@ int updateNewDomainMapsForCpu(int cpu, unsigned char *newCpuMaps, CpuStatsUsage_
     checkNull(targetWeights);
     checkNull(stats);
 
-    domain = getDomainToPinToCpu(cpumask, newCpuMaps, targetWeights, stats);
+    domain = getDomainToPinToCpu(cpumask, newCpuMaps, targetWeights[cpu], stats);
     if (domain < 0) {
         return -1;
     }
 
     newCpuMaps[domain] = newCpuMaps[domain] | cpumask;
     targetWeights[cpu] -= stats->domainUsages[domain];
+     printf("cpu %d receives domain %d, new weight %.2Lf, domain weight %.2Lf, new map 0x%X\n",
+        cpu, domain, targetWeights[cpu], stats->domainUsages[domain], newCpuMaps[domain]);
 
     return 0;
 error:
@@ -101,6 +117,8 @@ int updateCpuMaps(unsigned char *newCpuMaps, CpuStatsUsage_t *targetWeights, Cpu
     while (numFailed < stats->numCpus) {
         for (cpu = 0; cpu < stats->numCpus; cpu++) {
             res = updateNewDomainMapsForCpu(cpu, newCpuMaps, targetWeights, stats);
+            printf("target weight to fill %d:%.2Lf, res %d\n", cpu, targetWeights[cpu], res);
+            // res = -1;
             if (res < 0) {
                 numFailed++;
             }
@@ -170,12 +188,11 @@ int allocateCpus(CpuStats *stats, GuestList *guests)
     targetWeights = calloc(stats->numCpus, sizeof(CpuStatsUsage_t));
     checkMemAlloc(targetWeights);
 
-    // rt = computeTargetDiffsUsingWeight(stats, targetDiffs);
     rt = computeTargetCpuWeights(stats, targetWeights);
     check(rt == 0, "could not compute target diffs");
 
     for (int i = 0; i < stats->numCpus; i++) {
-        printf("cpu %d target weight %.2Lf\n", i, 100 * targetWeights[i]);
+        printf("cpu %d target weight %.2Lf\n", i, targetWeights[i]);
     }
 
     repinCpus(stats, guests, targetWeights);
