@@ -35,14 +35,6 @@ int main(int argc, char *argv[])
     check(rt == 0, "error updating stats");
     CpuStatsPrint(stats);
 
-    sleep(2);
-    rt = updateStats(stats, guests, 2);
-    check(rt == 0, "error updating stats");
-    CpuStatsPrint(stats);
-
-    rt = allocateCpus(stats, guests);
-    check(rt == 0, "error allocating cpus");
-
     while (1) {
         puts("sleeping...");
         sleep(interval);
@@ -53,11 +45,6 @@ int main(int argc, char *argv[])
         check(rt == 0, "error allocating cpus");
         puts("scheduling cycle done\n");
     }
-
-    // unsigned char cpumap = 0x0f;
-    // for (int d = 0; d < guests->count; d++) {
-    //     virDomainPinVcpu(GuestListDomainAt(guests, d), 0, &cpumap, 1);
-    // }
 
     GuestListFree(guests);
     CpuStatsFree(stats);
