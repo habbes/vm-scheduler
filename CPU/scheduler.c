@@ -29,6 +29,18 @@ error:
     return -1;
 }
 
+int checkIfCpusAreBalanced(CpuStats *stats, CpuStatsUsage_t *targetWeights)
+{
+    CpuStatsUsage_t usage = 0;
+    for (int i = 0; i < stats->numCpus; i++) {
+        usage = CpuStatsCountDomainWeightOnCpu(stats, i);
+        if (!almostEquals(usage, targetWeights[i])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int getDomainToPinToCpu(unsigned char cpumask, unsigned char *newCpuMaps, CpuStatsUsage_t targetWeight, CpuStats *stats)
 {
     int d = 0;
@@ -195,7 +207,12 @@ int allocateCpus(CpuStats *stats, GuestList *guests)
         printf("cpu %d target weight %.2Lf\n", i, targetWeights[i]);
     }
 
-    repinCpus(stats, guests, targetWeights);
+    if (checkIfCpusAreBalanced(stats, targetWeights)) {
+        printf("cpus already balanced, nothing to do...\n");
+    }
+    else {
+        repinCpus(stats, guests, targetWeights);
+    }
 
     rt = 0;
     goto final;
