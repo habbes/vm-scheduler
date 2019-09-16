@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <locale.h>
+#include <unistd.h>
 #include <libvirt/libvirt.h>
 #include "guestlist.h"
 #include "memstats.h"
@@ -37,9 +38,17 @@ int main(int argc, char *argv[])
     guests = GuestListGet(conn);
     check(conn, "Failed to create guest list");
 
-    stats = MemStatsGet(conn, guests);
-    check(stats, "Failed to get memory stats\n");
+    stats = MemStatsCreate(conn, guests);
+    check(stats, "Failed to create memory stats\n");
 
+    rt = MemStatsInit(stats, conn, guests);
+    check(rt == 0, "failed to init memory stats");
+    MemStatsPrint(stats);
+
+    sleep(2);
+
+    rt = MemStatsUpdate(stats, conn, guests, 1);
+    check(rt == 0, "failed to update memory stats");
     MemStatsPrint(stats);
 
     rt = 0;

@@ -30,6 +30,10 @@ typedef struct DomainMemStats {
      * This value is expressed in kB.
      */
     MemStatUnit available;
+    /**
+     * Maximum amount of physical memory allocated to the domain
+     */
+    MemStatUnit max;
 } DomainMemStats;
 
 typedef struct HostMemStats {
@@ -41,10 +45,13 @@ typedef struct MemStats {
     int numDomains;
     DomainMemStats *domainStats;
     HostMemStats hostStats;
+    DomainMemStats *domainDeltas;
 } MemStats;
 
-MemStats *MemStatsGet(virConnectPtr conn, GuestList *guests);
+MemStats *MemStatsCreate(virConnectPtr conn, GuestList *guests);
 void MemStatsFree(MemStats *stats);
 void MemStatsPrint(MemStats *print);
+int MemStatsInit(MemStats *stats, virConnectPtr conn, GuestList *guests);
+int MemStatsUpdate(MemStats *stats, virConnectPtr conn, GuestList *guests, int updateDeltas);
 
 #endif
