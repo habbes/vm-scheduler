@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <locale.h>
 #include <libvirt/libvirt.h>
 #include "guestlist.h"
 #include "memstats.h"
@@ -27,6 +28,8 @@ int main(int argc, char *argv[])
 {
     char *uri = "qemu:///system";
     int rt = 0;
+
+    setlocale(LC_NUMERIC, "");
 
     conn = virConnectOpen(uri);
     check(conn, "Failed to connect to hypervisor");

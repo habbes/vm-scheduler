@@ -7,7 +7,7 @@
 #define MAX_STATS 15
 typedef unsigned long long MemStatUnit;
 
-typedef struct {
+typedef struct DomainMemStats {
     /**
      * Current balloon value (in KB).
      */
@@ -32,9 +32,15 @@ typedef struct {
     MemStatUnit available;
 } DomainMemStats;
 
-typedef struct {
+typedef struct HostMemStats {
+    MemStatUnit total;
+    MemStatUnit free;
+} HostMemStats;
+
+typedef struct MemStats {
     int numDomains;
     DomainMemStats *domainStats;
+    HostMemStats hostStats;
 } MemStats;
 
 MemStats *MemStatsGet(virConnectPtr conn, GuestList *guests);
