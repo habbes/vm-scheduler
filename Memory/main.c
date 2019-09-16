@@ -2,10 +2,13 @@
 #include <stdlib.h>
 #include <libvirt/libvirt.h>
 #include "guestlist.h"
+#include "memstats.h"
 #include "check.h"
 
 virConnectPtr conn = NULL;
 GuestList *guests = NULL;
+MemStats *stats = NULL;
+
 
 void cleanUp()
 {
@@ -14,6 +17,9 @@ void cleanUp()
     }
     if (guests) {
         GuestListFree(guests);
+    }
+    if (stats) {
+        MemStatsFree(stats);
     }
 }
 
@@ -28,7 +34,10 @@ int main(int argc, char *argv[])
     guests = GuestListGet(conn);
     check(conn, "Failed to create guest list");
 
-    printf("Guests found %d\n", guests->count);
+    stats = MemStatsGet(conn, guests);
+    check(stats, "Failed to get memory stats\n");
+
+    MemStatsPrint(stats);
 
     rt = 0;
     goto final;
