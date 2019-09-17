@@ -52,6 +52,7 @@ int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats)
 {
     unsigned long newSize;
     checkNull(plan);
+    checkNull(stats);
 
     for (int i = 0; i < plan->numDomains; i++) {
         newSize = (unsigned long) (stats->domainStats[i].actual + plan->toAlloc[i] - plan->toDealloc[i]);
@@ -87,6 +88,8 @@ AllocPlan *AllocPlanCreate(int numDomains)
     checkMemAlloc(plan->toAlloc);
     plan->toDealloc = calloc(numDomains, sizeof(MemStatUnit));
     checkMemAlloc(plan->toDealloc);
+    plan->newSizes = calloc(numDomains, sizeof(unsigned long));
+    checkMemAlloc(plan->newSizes);
 
     return plan;
 error:

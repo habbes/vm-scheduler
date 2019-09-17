@@ -18,6 +18,6 @@ int AllocPlanReset(AllocPlan *plan);
 MemStatUnit AllocPlanDiff(AllocPlan *plan);
 int AllocPlanAddAlloc(AllocPlan *plan, int domain, MemStatUnit size);
 int AllocPlanAddDealloc(AllocPlan *plan, int domain, MemStatUnit size);
-int AllocComputeNewSizes(AllocPlan *plan);
+int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats);
 
 #endif

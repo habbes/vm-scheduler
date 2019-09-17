@@ -19,9 +19,11 @@ int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
     virDomainPtr domain;
     for (int i = 0; i < plan->numDomains; i++) {
         domain = GuestListDomainAt(guests, i);
-        printf("Setting memory %'lukb for domain %d\n", plan->newSizes[i], i);
-        rt = virDomainSetMemory(domain, plan->newSizes[i]);
-        check(rt == 0, "failed to set memory for domain");
+        if (plan->newSizes[i] != stats->domainStats[i].actual) {
+            printf("Setting memory %'lukb for domain %d\n", plan->newSizes[i], i);
+            rt = virDomainSetMemory(domain, plan->newSizes[i]);
+            check(rt == 0, "failed to set memory for domain");
+        }
     }
 
     return 0;
@@ -49,7 +51,8 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
             // domain has used up more memory and is below threshold
             printf("Domain %d has used %'.2fkb and is below threshold (%.2f%%)\n",
                 d, -deltas->unused, unusedPct(stats, d) * 100);
-            AllocPlanAddAlloc(plan, d, -deltas->unused);
+            rt = AllocPlanAddAlloc(plan, d, -deltas->unused);
+            check(rt == 0, "failed to add allocation to plan");
         }
     }
 
@@ -61,7 +64,8 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
             // domain has released some memory and is above threshold
             printf("Domain %d has released %'.2fkb and is above threshold (%.2f%%)\n",
                 d, deltas->unused, unusedPct(stats, d) * 100);
-            AllocPlanAddDealloc(plan, d, deltas->unused);
+            rt = AllocPlanAddDealloc(plan, d, deltas->unused);
+            check(rt == 0, "failed to add deallocation to plan");
         }
     }
 
@@ -88,12 +92,16 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
 
             if (canDeallocate(stats, d)) {
                printf("Domain %d eligible for deallocating %'.2fkb\n", d, deallocQuota);
-               AllocPlanAddDealloc(plan, d, deallocQuota);
+               rt = AllocPlanAddDealloc(plan, d, deallocQuota);
+               check(rt == 0, "failed to add deallocation quota to domain");
             }
         }
     }
     
-    executeAllocationPlan(plan, stats, guests);
+    rt = AllocPlanComputeNewSizes(plan, stats);
+    check(rt == 0, "failed to compute new memory sizes");
+    rt = executeAllocationPlan(plan, stats, guests);
+    check(rt == 0, "failed to execute allocation plan");
 
     rt = 0;
     goto final;
