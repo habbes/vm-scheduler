@@ -15,6 +15,84 @@
 
 #define canDeallocate(stats, dom) (unusedPct(stats, dom) > SAFE_UNUSED_THRESHOLD)
 
+int allocateStarvingGuests(AllocPlan *plan, MemStats *stats)
+{
+    int rt = 0;
+    DomainMemStats *deltas = NULL;
+
+    for (int d = 0; d < plan->numDomains; d++) {
+        deltas = stats->domainDeltas + d;
+
+        if (certainlyGreaterThan(0, deltas->unused) && isUnusedBelowThreshold(stats, d)) {
+            // domain has used up more memory and is below threshold
+            printf("Domain %d has used %'.2fkb and is below threshold (%.2f%%)\n",
+                d, -deltas->unused, unusedPct(stats, d) * 100);
+            rt = AllocPlanAddAlloc(plan, d, 2 * (-deltas->unused));
+            check(rt == 0, "failed to add allocation to plan");
+        }
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
+int deallocateWastefulGuests(AllocPlan *plan, MemStats *stats)
+{
+    int rt = 0;
+    DomainMemStats *deltas = NULL;
+    for (int d = 0; d < plan->numDomains; d++) {
+        deltas = stats->domainDeltas + d;
+
+        if (deltas->unused > MIN_CHANGE_FOR_DEALLOC && canDeallocate(stats, d)) {
+            // domain has released some memory and is above threshold
+            printf("Domain %d has released %'.2fkb and is above threshold (%.2f%%)\n",
+                d, deltas->unused, unusedPct(stats, d) * 100);
+            rt = AllocPlanAddDealloc(plan, d, deltas->unused);
+            check(rt == 0, "failed to add deallocation to plan");
+        }
+    }
+    return 0;
+error:
+    return -1;
+}
+
+int deallocateSafeGuests(AllocPlan *plan, MemStats *stats)
+{
+    int rt = 0;
+    MemStatUnit deallocMem = 0;
+    deallocMem = AllocPlanDiff(plan);
+    int candidates = 0;
+
+    if (certainlyGreaterThan(deallocMem, MIN_CHANGE_FOR_DEALLOC)) {
+        printf("Additional %'.2fkb needs to be freed, looking for candidates...\n", deallocMem);
+        for (int d = 0; d < plan->numDomains; d++) {
+            if (canDeallocate(stats, d)) {
+               candidates += 1;
+            }
+        }
+    }
+
+    if (candidates > 0) {
+        MemStatUnit deallocQuota = deallocMem / candidates;
+
+        for (int d = 0; d < plan->numDomains; d++) {
+            if (canDeallocate(stats, d)) {
+               printf("Domain %d eligible for deallocating %'.2fkb\n", d, deallocQuota);
+               rt = AllocPlanAddDealloc(plan, d, deallocQuota);
+               check(rt == 0, "failed to add deallocation quota to domain");
+            }
+        }
+    }
+    else {
+        printf("No additional domains eligible for deallocation\n");
+    }
+
+    return 0;
+error:
+    return -1;
+}
 
 int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
 {
@@ -38,63 +116,23 @@ error:
 int reallocateMemory(MemStats *stats, GuestList *guests)
 {
     int rt = 0;
-    DomainMemStats *deltas;
     AllocPlan *plan = NULL;
-    MemStatUnit deallocMem = 0;
     checkNull(stats);
     checkNull(guests);
     plan = AllocPlanCreate(guests->count);
     checkNull(plan);
 
     // get domains that need more memory
-    for (int d = 0; d < guests->count; d++) {
-        deltas = stats->domainDeltas + d;
-
-        if (certainlyGreaterThan(0, deltas->unused) && isUnusedBelowThreshold(stats, d)) {
-            // domain has used up more memory and is below threshold
-            printf("Domain %d has used %'.2fkb and is below threshold (%.2f%%)\n",
-                d, -deltas->unused, unusedPct(stats, d) * 100);
-            rt = AllocPlanAddAlloc(plan, d, -deltas->unused);
-            check(rt == 0, "failed to add allocation to plan");
-        }
-    }
+    rt = allocateStarvingGuests(plan, stats);
+    check(rt == 0, "failed to allocate starving guests");
 
     // get candidates that are releasing memory
-    for (int d = 0; d < guests->count; d++) {
-        deltas = stats->domainDeltas + d;
-
-        if (deltas->unused > MIN_CHANGE_FOR_DEALLOC && canDeallocate(stats, d)) {
-            // domain has released some memory and is above threshold
-            printf("Domain %d has released %'.2fkb and is above threshold (%.2f%%)\n",
-                d, deltas->unused, unusedPct(stats, d) * 100);
-            rt = AllocPlanAddDealloc(plan, d, deltas->unused);
-            check(rt == 0, "failed to add deallocation to plan");
-        }
-    }
+    rt = deallocateWastefulGuests(plan, stats);
+    check(rt == 0, "failed to deallocate wasteful guests");
 
     // get remaining memory from candidates not using up their memory
-    deallocMem = AllocPlanDiff(plan);
-    int extraDeallocCandidates = 0;
-    printf("Additional %'.2fkb needs to be freed, looking for candidates...\n", deallocMem);
-    if (certainlyGreaterThan(deallocMem, MIN_CHANGE_FOR_DEALLOC)) {
-        for (int d = 0; d < guests->count; d++) {
-            if (canDeallocate(stats, d)) {
-               extraDeallocCandidates += 1;
-            }
-        }
-        if (extraDeallocCandidates == 0) {
-            printf("No additional domains eligible for deallocation\n");
-        }
-        MemStatUnit deallocQuota = deallocMem / extraDeallocCandidates;
-
-        for (int d = 0; d < guests->count; d++) {
-            if (canDeallocate(stats, d)) {
-               printf("Domain %d eligible for deallocating %'.2fkb\n", d, deallocQuota);
-               rt = AllocPlanAddDealloc(plan, d, deallocQuota);
-               check(rt == 0, "failed to add deallocation quota to domain");
-            }
-        }
-    }
+    rt = deallocateSafeGuests(plan, stats);
+    check(rt == 0, "failed to deallocate safe guests");
     
     rt = AllocPlanComputeNewSizes(plan, stats);
     check(rt == 0, "failed to compute new memory sizes");
