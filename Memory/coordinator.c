@@ -13,32 +13,20 @@
 #define canDeallocate(stats, dom) (unusedPct(stats, dom) > SAFE_UNUSED_THRESHOLD)
 
 
-
-
-int changeMemorySize(int d, MemStatUnit sizeChange, MemStats *stats, GuestList *guests)
-{
-    virDomainPtr domain = GuestListDomainAt(guests, d);
-    unsigned long newSize = (unsigned long) (stats->domainStats[d].actual + sizeChange);
-    printf("Setting new size %'lukb (diff %'.2fkb) for domain %d\n", newSize, sizeChange, d);
-    return  virDomainSetMemory(domain, newSize);
-}
-
 int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
 {
-    int domain = -1;
-    MemStatUnit sizeChange = 0;
-    for (int i = 0; i < plan->numDealloc; i++) {
-        domain = plan->toDealloc[i].domain;
-        sizeChange = plan->toDealloc[i].size;
-        changeMemorySize(domain, -sizeChange, stats, guests);
-    }
-    for(int i = 0; i < plan->numAlloc; i++) {
-        domain = plan->toAlloc[i].domain;
-        sizeChange = plan->toAlloc[i].size;
-        changeMemorySize(domain, sizeChange, stats, guests);
+    int rt = 0;
+    virDomainPtr domain;
+    for (int i = 0; i < plan->numDomains; i++) {
+        domain = GuestListDomainAt(guests, i);
+        printf("Setting memory %'lukb for domain %d\n", plan->newSizes[i], i);
+        rt = virDomainSetMemory(domain, plan->newSizes[i]);
+        check(rt == 0, "failed to set memory for domain");
     }
 
     return 0;
+error:
+    return -1;
 }
 
 

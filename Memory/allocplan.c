@@ -7,12 +7,7 @@ int AllocPlanAddAlloc(AllocPlan *plan, int domain, MemStatUnit size)
 {
     checkNull(plan);
     check(domain >= 0 && domain < plan->numDomains, "invalid domain added to alloc plan");
-    check(plan->numAlloc < plan->numDomains, "domains to allocate full");
-    DomainAlloc *alloc = plan->toAlloc + plan->numAlloc;
-
-    alloc->domain = domain;
-    alloc->size = size;
-    plan->numAlloc++;
+    plan->toAlloc[domain] += size;
 
     return 0;
 error:
@@ -23,14 +18,61 @@ int AllocPlanAddDealloc(AllocPlan *plan, int domain, MemStatUnit size)
 {
     checkNull(plan);
     check(domain >= 0 && domain < plan->numDomains, "invalid domain added to alloc plan");
-    check(plan->numDealloc < plan->numDomains, "domains to deallocate full");
-    DomainAlloc *dealloc = plan->toDealloc + plan->numDealloc;
-
-    dealloc->domain = domain;
-    dealloc->size = size;
-    plan->numDealloc++;
+    plan->toDealloc[domain] += size;
 
     return 0;
+error:
+    return -1;
+}
+
+MemStatUnit AllocPlanTotalAlloc(AllocPlan *plan)
+{
+    MemStatUnit total = 0;
+    for (int i = 0; i < plan->numDomains; i++) {
+        total += plan->toAlloc[i];
+    }
+    return total;
+}
+
+MemStatUnit AllocPlanTotalDealloc(AllocPlan *plan)
+{
+    MemStatUnit total = 0;
+    for (int i = 0; i < plan->numDomains; i++) {
+        total += plan->toDealloc[i];
+    }
+    return total;
+}
+
+MemStatUnit AllocPlanDiff(AllocPlan *plan)
+{
+    return AllocPlanTotalAlloc(plan) - AllocPlanTotalDealloc(plan);
+}
+
+int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats)
+{
+    unsigned long newSize;
+    checkNull(plan);
+
+    for (int i = 0; i < plan->numDomains; i++) {
+        newSize = (unsigned long) (stats->domainStats[i].actual + plan->toAlloc[i] - plan->toDealloc[i]);
+        plan->newSizes[i] = newSize;
+    }
+
+    return 0;
+error:
+    return -1;
+}
+
+int AllocPlanReset(AllocPlan *plan)
+{
+    checkNull(plan);
+
+    checkNull(memset(plan->toAlloc, 0, sizeof(MemStatUnit) * plan->numDomains));
+    checkNull(memset(plan->toDealloc, 0, sizeof(MemStatUnit) * plan->numDomains));
+    checkNull(memset(plan->newSizes, 0, sizeof(unsigned long) * plan->numDomains));
+
+    return 0;
+
 error:
     return -1;
 }
@@ -41,38 +83,15 @@ AllocPlan *AllocPlanCreate(int numDomains)
     plan = calloc(1, sizeof(AllocPlan));
     checkMemAlloc(plan);
     plan->numDomains = numDomains;
-    plan->toAlloc = calloc(numDomains, sizeof(DomainAlloc));
+    plan->toAlloc = calloc(numDomains, sizeof(MemStatUnit));
     checkMemAlloc(plan->toAlloc);
-    plan->toDealloc = calloc(numDomains, sizeof(DomainAlloc));
+    plan->toDealloc = calloc(numDomains, sizeof(MemStatUnit));
     checkMemAlloc(plan->toDealloc);
 
     return plan;
 error:
     free(plan);
     return NULL;
-}
-
-MemStatUnit AllocPlanTotalAlloc(AllocPlan *plan)
-{
-    MemStatUnit total = 0;
-    for (int i = 0; i < plan->numAlloc; i++) {
-        total += plan->toAlloc[i].size;
-    }
-    return total;
-}
-
-MemStatUnit AllocPlanTotalDealloc(AllocPlan *plan)
-{
-    MemStatUnit total = 0;
-    for (int i = 0; i < plan->numDealloc; i++) {
-        total += plan->toDealloc[i].size;
-    }
-    return total;
-}
-
-MemStatUnit AllocPlanDiff(AllocPlan *plan)
-{
-    return AllocPlanTotalAlloc(plan) - AllocPlanTotalDealloc(plan);
 }
 
 void AllocPlanFree(AllocPlan *plan)
@@ -86,19 +105,4 @@ void AllocPlanFree(AllocPlan *plan)
         }
         free(plan);
     }
-}
-
-int AllocPlanReset(AllocPlan *plan)
-{
-    checkNull(plan);
-
-    plan->numAlloc = 0;
-    plan->numDealloc = 0;
-    checkNull(memset(plan->toAlloc, 0, sizeof(DomainAlloc)));
-    checkNull(memset(plan->toDealloc, 0, sizeof(DomainAlloc)));
-
-    return 0;
-
-error:
-    return -1;
 }
