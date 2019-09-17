@@ -2,6 +2,7 @@
 #include "check.h"
 #include "coordinator.h"
 #include "allocplan.h"
+#include "util.h"
 
 #define LOW_UNUSED_THRESHOLD 0.2
 #define SAFE_UNUSED_THRESHOLD 0.3
@@ -19,7 +20,7 @@ int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
     virDomainPtr domain;
     for (int i = 0; i < plan->numDomains; i++) {
         domain = GuestListDomainAt(guests, i);
-        if (plan->newSizes[i] != stats->domainStats[i].actual) {
+        if (!almostEquals(plan->newSizes[i], stats->domainStats[i].actual)) {
             printf("Setting memory %'lukb for domain %d\n", plan->newSizes[i], i);
             rt = virDomainSetMemory(domain, plan->newSizes[i]);
             check(rt == 0, "failed to set memory for domain");
