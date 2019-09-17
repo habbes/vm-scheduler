@@ -53,6 +53,11 @@ int main(int argc, char *argv[])
     guests = GuestListGet(conn);
     check(conn, "Failed to create guest list");
 
+    for(int i = 0; i < guests->count; i++) {
+        rt = virDomainSetMemoryStatsPeriod(GuestListDomainAt(guests, i), 1, 0);
+        check(rt == 0, "failed to set memory stats period");
+    }
+
     stats = MemStatsCreate(conn, guests);
     check(stats, "Failed to create memory stats\n");
 
