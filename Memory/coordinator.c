@@ -6,6 +6,8 @@
 
 #define LOW_UNUSED_THRESHOLD 0.2
 #define SAFE_UNUSED_THRESHOLD 0.3
+// minimum memory change in allocation plan to warrant de-allocation
+#define MIN_CHANGE_FOR_DEALLOC 1000
 
 #define unusedPct(stats, dom) ((stats)->domainStats[(dom)].unused / (stats)->domainStats[(dom)].actual)
 
@@ -48,7 +50,7 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
     for (int d = 0; d < guests->count; d++) {
         deltas = stats->domainDeltas + d;
 
-        if (deltas->unused < 0 && isUnusedBelowThreshold(stats, d)) {
+        if (certainlyGreaterThan(0, deltas->unused) && isUnusedBelowThreshold(stats, d)) {
             // domain has used up more memory and is below threshold
             printf("Domain %d has used %'.2fkb and is below threshold (%.2f%%)\n",
                 d, -deltas->unused, unusedPct(stats, d) * 100);
@@ -61,7 +63,7 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
     for (int d = 0; d < guests->count; d++) {
         deltas = stats->domainDeltas;
 
-        if (deltas->unused > 0 && canDeallocate(stats, d)) {
+        if (certainlyGreaterThan(deltas->unused, 0) && canDeallocate(stats, d)) {
             // domain has released some memory and is above threshold
             printf("Domain %d has released %'.2fkb and is above threshold (%.2f%%)\n",
                 d, deltas->unused, unusedPct(stats, d) * 100);
@@ -74,12 +76,11 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
     deallocMem = AllocPlanDiff(plan);
     int extraDeallocCandidates = 0;
     printf("Additional %'.2fkb needs to be freed, looking for candidates...\n", deallocMem);
-    if (deallocMem > 0) {
+    if (certainlyGreaterThan(deallocMem, MIN_CHANGE_FOR_DEALLOC)) {
         for (int d = 0; d < guests->count; d++) {
             deltas = stats->domainDeltas;
 
             if (canDeallocate(stats, d)) {
-                // domain has released some memory and is above threshold
                extraDeallocCandidates += 1;
             }
         }

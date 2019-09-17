@@ -75,6 +75,9 @@ int main(int argc, char *argv[])
         check(rt == 0, "error updating stats");
         rt = reallocateMemory(stats, guests);
         check(rt == 0, "error re-allocating memory");
+        // update stats to match the new allocations
+        rt = MemStatsUpdate(stats, conn, guests, 0);
+        check(rt == 0, "error updating stats");
         puts("memory coordination cycle done\n");
     }
 
