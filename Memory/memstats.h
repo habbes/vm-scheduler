@@ -5,7 +5,7 @@
 #include "guestlist.h"
 
 #define MAX_STATS 15
-typedef unsigned long long MemStatUnit;
+typedef double MemStatUnit;
 
 typedef struct DomainMemStats {
     /**

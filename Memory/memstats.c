@@ -42,10 +42,16 @@ int MemStatsUpdateDomainStats(virConnectPtr conn, GuestList *guests, MemStats *s
     int numStats = 0;
     virDomainPtr domain = NULL;
     virDomainMemoryStatStruct tempStats[MAX_STATS];
+    DomainMemStats *deltas;
+    DomainMemStats *domainStats;
 
     for (int i = 0; i < stats->numDomains; i++) {
         domain = GuestListDomainAt(guests, i);
         numStats = virDomainMemoryStats(domain, tempStats, MAX_STATS, 0);
+        deltas = stats->domainDeltas + i;
+        domainStats = stats->domainStats + i;
+
+
         check(numStats > 0, "Could not get domain memory stats");
 
         stats->domainStats[i].max = (MemStatUnit) virDomainGetMaxMemory(domain);
@@ -55,27 +61,27 @@ int MemStatsUpdateDomainStats(virConnectPtr conn, GuestList *guests, MemStats *s
             switch (tempStats[j].tag) {
                 case VIR_DOMAIN_MEMORY_STAT_ACTUAL_BALLOON:
                     if (updateDeltas) {
-                        stats->domainDeltas[i].actual = (MemStatUnit) tempStats[j].val - stats->domainStats[i].actual;
+                        deltas->actual = (MemStatUnit) tempStats[j].val - domainStats->actual;
                     }
-                    stats->domainStats[i].actual = (MemStatUnit) tempStats[j].val;
+                    domainStats->actual = (MemStatUnit) tempStats[j].val;
                     break;
                 case VIR_DOMAIN_MEMORY_STAT_UNUSED:
                     if (updateDeltas) {
-                        stats->domainDeltas[i].unused = (MemStatUnit) tempStats[j].val - stats->domainStats[i].unused;
+                        deltas->unused = (MemStatUnit) tempStats[j].val - domainStats->unused;
                     }
-                    stats->domainStats[i].unused = (MemStatUnit) tempStats[j].val;
+                    domainStats->unused = (MemStatUnit) tempStats[j].val;
                     break;
                 case VIR_DOMAIN_MEMORY_STAT_USABLE:
                     if (updateDeltas) {
-                        stats->domainDeltas[i].usable = (MemStatUnit) tempStats[j].val - stats->domainStats[i].usable;
+                        deltas->usable = (MemStatUnit) tempStats[j].val - domainStats->usable;
                     }
-                    stats->domainStats[i].usable = (MemStatUnit) tempStats[j].val;
+                    domainStats->usable = (MemStatUnit) tempStats[j].val;
                     break;
                 case VIR_DOMAIN_MEMORY_STAT_AVAILABLE:
                     if (updateDeltas) {
-                        stats->domainDeltas[i].available = (MemStatUnit) tempStats[j].val - stats->domainStats[i].available;
+                        deltas->available = (MemStatUnit) tempStats[j].val - domainStats->available;
                     }
-                    stats->domainStats[i].available = (MemStatUnit) tempStats[j].val;
+                    domainStats->available = (MemStatUnit) tempStats[j].val;
                     break;
             }
         }
@@ -150,22 +156,22 @@ void MemStatsPrint(MemStats *stats)
     printf("Memory stats\n");
     
     printf("Host stats\n");
-    printf("-- Total: %'llu\n", stats->hostStats.total);
-    printf("-- Free: %'llu\n", stats->hostStats.free);
+    printf("-- Total: %'2.f\n", stats->hostStats.total);
+    printf("-- Free: %'2.f\n", stats->hostStats.free);
     puts("");
 
     for (int i = 0; i < stats->numDomains; i++) {
         printf("Domain %d stats\n", i);
-        printf("-- Actual %'llu\n", stats->domainStats[i].actual);
-        printf("-- Unused %'llu\n", stats->domainStats[i].unused);
-        printf("-- Usable %'llu\n", stats->domainStats[i].usable);
-        printf("-- Available %'llu\n", stats->domainStats[i].available);
-        printf("-- Max: %'llu\n", stats->domainStats[i].max);
+        printf("-- Actual: %'.2f\n", stats->domainStats[i].actual);
+        printf("-- Unused: %'.2f\n", stats->domainStats[i].unused);
+        printf("-- Usable: %'.2f\n", stats->domainStats[i].usable);
+        printf("-- Available: %'.2f\n", stats->domainStats[i].available);
+        printf("-- Max: %'.2f\n", stats->domainStats[i].max);
         printf("Domain %d deltas\n", i);
-        printf("-- Actual %'llu\n", stats->domainDeltas[i].actual);
-        printf("-- Unused %'llu\n", stats->domainDeltas[i].unused);
-        printf("-- Usable %'llu\n", stats->domainDeltas[i].usable);
-        printf("-- Available %'llu\n", stats->domainDeltas[i].available);
+        printf("-- Actual: %'.2f\n", stats->domainDeltas[i].actual);
+        printf("-- Unused: %'.2f\n", stats->domainDeltas[i].unused);
+        printf("-- Usable: %'.2f\n", stats->domainDeltas[i].usable);
+        printf("-- Available: %'.2f\n", stats->domainDeltas[i].available);
         puts("");
     }
 }
