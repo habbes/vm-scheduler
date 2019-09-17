@@ -125,6 +125,33 @@ error:
     return -1;
 }
 
+int changeMemorySize(int d, MemStatUnit sizeChange, MemStats *stats, GuestList *guests)
+{
+    virDomainPtr domain = GuestListDomainAt(guests, d);
+    unsigned long newSize = (unsigned long) (stats->domainStats[d].actual + sizeChange);
+    printf("Setting new size %'lukb (diff %'.2fkb) for domain %d\n", newSize, sizeChange, d);
+    return  virDomainSetMemory(domain, newSize);
+}
+
+int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
+{
+    int domain = -1;
+    MemStatUnit sizeChange = 0;
+    for (int i = 0; i < plan->numDealloc; i++) {
+        domain = plan->toDealloc[i].domain;
+        sizeChange = plan->toDealloc[i].size;
+        changeMemorySize(domain, -sizeChange, stats, guests);
+    }
+    for(int i = 0; i < plan->numAlloc; i++) {
+        domain = plan->toAlloc[i].domain;
+        sizeChange = plan->toAlloc[i].size;
+        changeMemorySize(domain, sizeChange, stats, guests);
+    }
+
+    return 0;
+}
+
+
 int reallocateMemory(MemStats *stats, GuestList *guests)
 {
     int rt = 0;
@@ -188,7 +215,7 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
         }
     }
     
-
+    executeAllocationPlan(plan, stats, guests);
 
     rt = 0;
     goto final;
