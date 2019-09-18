@@ -9,6 +9,8 @@
 // minimum memory change in allocation plan to warrant de-allocation
 #define MIN_CHANGE_FOR_DEALLOC 1024
 
+#define MIN_HOST_MEMORY 500 * 1024
+
 #define unusedPct(stats, dom) ((stats)->domainStats[(dom)].unused / (stats)->domainStats[(dom)].actual)
 
 #define isUnusedBelowThreshold(stats, dom) (unusedPct(stats, dom) < LOW_UNUSED_THRESHOLD)
@@ -134,7 +136,7 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
     rt = deallocateSafeGuests(plan, stats);
     check(rt == 0, "failed to deallocate safe guests");
     
-    rt = AllocPlanComputeNewSizes(plan, stats);
+    rt = AllocPlanComputeNewSizes(plan, stats, stats->hostStats.total - MIN_HOST_MEMORY);
     check(rt == 0, "failed to compute new memory sizes");
     rt = executeAllocationPlan(plan, stats, guests);
     check(rt == 0, "failed to execute allocation plan");

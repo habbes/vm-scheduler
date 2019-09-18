@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "check.h"
 #include "allocplan.h"
 
@@ -48,15 +49,33 @@ MemStatUnit AllocPlanDiff(AllocPlan *plan)
     return AllocPlanTotalAlloc(plan) - AllocPlanTotalDealloc(plan);
 }
 
-int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats)
+int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats, unsigned long maxTotalSize)
 {
     unsigned long newSize;
+    unsigned long totalNewSize = 0;
+    double excess = 0;
+    double excessOnDomain = 0;
+    int numIncreased = 0; // number of domains which are getting more memory
     checkNull(plan);
     checkNull(stats);
 
     for (int i = 0; i < plan->numDomains; i++) {
         newSize = (unsigned long) (stats->domainStats[i].actual + plan->toAlloc[i] - plan->toDealloc[i]);
         plan->newSizes[i] = newSize;
+        totalNewSize += newSize;
+        numIncreased += (newSize > stats->domainStats[i].actual);
+    }
+    excess = (double) totalNewSize - (double) maxTotalSize;
+    excessOnDomain = numIncreased > 0 ? ceil(excess / numIncreased) : 0;
+    if (excessOnDomain > 0) {
+        // adjust sizes of domains with increased memory
+        for (int i = 0; i < plan->numDomains; i++) {
+            if (plan->newSizes[i] <= stats->domainStats[i].actual) continue;
+    
+            plan->newSizes[i] = plan->newSizes[i] - (unsigned long) excessOnDomain;
+            printf("Free host memory exceeded by %'.1fkb, remove %'.1fkb from domain %d, new size %'lu\n",
+                excess, excessOnDomain, i, plan->newSizes[i]);
+        }
     }
 
     return 0;
