@@ -63,13 +63,13 @@ int main(int argc, char *argv[])
 
     rt = MemStatsInit(stats, conn, guests);
     check(rt == 0, "failed to init memory stats");
-    MemStatsPrint(stats);
+    MemStatsPrint(stats, guests);
 
     sleep(2);
 
     rt = MemStatsUpdate(stats, conn, guests, 1);
     check(rt == 0, "failed to update memory stats");
-    MemStatsPrint(stats);
+    MemStatsPrint(stats, guests);
 
 
     while (1) {
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
         puts("coordinating...");
         rt = MemStatsUpdate(stats, conn, guests, 1);
         check(rt == 0, "error updating stats");
-        MemStatsPrint(stats);
+        MemStatsPrint(stats, guests);
         rt = reallocateMemory(stats, guests);
         check(rt == 0, "error re-allocating memory");
         // update stats to match the new allocations

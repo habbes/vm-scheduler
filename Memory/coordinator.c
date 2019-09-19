@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <math.h>
 #include "check.h"
 #include "coordinator.h"
 #include "allocplan.h"
@@ -16,22 +17,37 @@
 #define isUnusedBelowThreshold(stats, dom) (unusedPct(stats, dom) < LOW_UNUSED_THRESHOLD || \
     MemStatsUnused(stats, dom) <= MIN_GUEST_MEMORY)
 
-#define canDeallocate(stats, dom) (unusedPct(stats, dom) > SAFE_UNUSED_THRESHOLD)
+#define canDeallocate(stats, dom) (unusedPct(stats, dom) > SAFE_UNUSED_THRESHOLD) && \
+    !(isUnusedBelowThreshold(stats, dom))
 
 int allocateStarvingGuests(AllocPlan *plan, MemStats *stats)
 {
     int rt = 0;
+    double threshold = 0;
+    double distToThresh = 0;
     DomainMemStats *deltas = NULL;
 
     for (int d = 0; d < plan->numDomains; d++) {
         deltas = stats->domainDeltas + d;
+        threshold = unusedPct(stats, d) * MemStatsActual(stats, d);
+        threshold = threshold > MIN_GUEST_MEMORY ? threshold : MIN_GUEST_MEMORY;
 
         if (certainlyGreaterThan(0, deltas->unused) && isUnusedBelowThreshold(stats, d)) {
             // domain has used up more memory and is below threshold
-            printf("Domain %d has used %'.2fkb and is below threshold (%.2f%%)\n",
-                d, -deltas->unused, unusedPct(stats, d) * 100);
-            rt = AllocPlanAddAlloc(plan, d, 2 * (-deltas->unused));
+            distToThresh = threshold - MemStatsUnused(stats, d);
+            printf("Domain %d has used %'.2fkb and is below threshold (%.1fkb)\n",
+                d, -deltas->unused, threshold);
+            // allocate double the amount needed to reach threshold since domain
+            // is still eating up memory
+            rt = AllocPlanAddAlloc(plan, d, ceil(2 * distToThresh));
             check(rt == 0, "failed to add allocation to plan");
+        }
+        else if (isUnusedBelowThreshold(stats, d)) {
+            // domain is not using memory, but still starving
+            // allocate only what's needed to reach threshold
+            distToThresh = MIN_GUEST_MEMORY - MemStatsUnused(stats, d);
+            printf("Domain %d is inactive but below threshold (%.1fkb)\n", d, threshold);
+            rt = AllocPlanAddAlloc(plan, d, ceil(distToThresh));
         }
     }
 

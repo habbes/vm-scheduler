@@ -49,9 +49,12 @@ typedef struct MemStats {
 } MemStats;
 
 #define MemStatsUnused(stats, dom) ((stats)->domainStats[(dom)].unused)
+#define MemStatsUsable(stats, dom) ((stats)->domainStats[(dom)].usable)
+#define MemStatsActual(stats, dom) ((stats)->domainStats[(dom)].actual)
+
 MemStats *MemStatsCreate(virConnectPtr conn, GuestList *guests);
 void MemStatsFree(MemStats *stats);
-void MemStatsPrint(MemStats *print);
+void MemStatsPrint(MemStats *print, GuestList *guests);
 int MemStatsInit(MemStats *stats, virConnectPtr conn, GuestList *guests);
 int MemStatsUpdate(MemStats *stats, virConnectPtr conn, GuestList *guests, int updateDeltas);
 

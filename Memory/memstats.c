@@ -147,7 +147,7 @@ error:
     return -1;
 }
 
-void MemStatsPrint(MemStats *stats)
+void MemStatsPrint(MemStats *stats, GuestList *guests)
 {
     if (!stats) {
         printf("Null stats pointer\n");
@@ -161,7 +161,7 @@ void MemStatsPrint(MemStats *stats)
     puts("");
 
     for (int i = 0; i < stats->numDomains; i++) {
-        printf("Domain %d stats\n", i);
+        printf("Domain %d (%s) stats\n", i, virDomainGetName(GuestListDomainAt(guests, i)));
         printf("-- Actual: %'.2f\n", stats->domainStats[i].actual);
         printf("-- Unused: %'.2f\n", stats->domainStats[i].unused);
         printf("-- Usable: %'.2f\n", stats->domainStats[i].usable);
