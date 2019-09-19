@@ -49,10 +49,11 @@ MemStatUnit AllocPlanDiff(AllocPlan *plan)
     return AllocPlanTotalAlloc(plan) - AllocPlanTotalDealloc(plan);
 }
 
-int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats, unsigned long maxTotalSize)
+int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats, unsigned long minHostFree)
 {
     unsigned long newSize;
     unsigned long totalNewSize = 0;
+    double remainingFree = 0;
     double excess = 0;
     double excessOnDomain = 0;
     int numIncreased = 0; // number of domains which are getting more memory
@@ -65,10 +66,17 @@ int AllocPlanComputeNewSizes(AllocPlan *plan, MemStats *stats, unsigned long max
         totalNewSize += newSize;
         numIncreased += (newSize > stats->domainStats[i].actual);
     }
-    excess = (double) totalNewSize - (double) maxTotalSize;
+    // what would be left of free memory if host memory was used to allocate vms
+    remainingFree = (double) stats->hostStats.free - (double) AllocPlanDiff(plan);
+    excess = (double) minHostFree - remainingFree;
+    // how much the new allocations would exceed free memory
+    excess = excess > 0 ? excess : 0;
     excessOnDomain = numIncreased > 0 ? ceil(excess / numIncreased) : 0;
+
+    printf("Alloc diff: %'.1fkb, curr free: %'.1fkb, remaining free: %'.1fkb, min free: %'lukb , excess: %'.1fkb, excess dom: %'.2fkb\n",
+        AllocPlanDiff(plan), stats->hostStats.free, remainingFree, minHostFree, excess, excessOnDomain);
     if (excessOnDomain > 0) {
-        // adjust sizes of domains with increased memory
+        // reduce sizes of domains with increased memory so to not to use up host free memory
         for (int i = 0; i < plan->numDomains; i++) {
             if (plan->newSizes[i] <= stats->domainStats[i].actual) continue;
     

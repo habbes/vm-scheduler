@@ -48,6 +48,7 @@ typedef struct MemStats {
     DomainMemStats *domainDeltas;
 } MemStats;
 
+#define MemStatsUnused(stats, dom) ((stats)->domainStats[(dom)].unused)
 MemStats *MemStatsCreate(virConnectPtr conn, GuestList *guests);
 void MemStatsFree(MemStats *stats);
 void MemStatsPrint(MemStats *print);
