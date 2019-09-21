@@ -11,6 +11,7 @@
 #define MIN_CHANGE_FOR_DEALLOC 1024
 #define MIN_GUEST_MEMORY 100 * 1024
 #define MIN_HOST_MEMORY 200 * 1024
+#define MAX_FREE_MEMORY 300 * 1024
 
 #define unusedPct(stats, dom) ((stats)->domainStats[(dom)].unused / (stats)->domainStats[(dom)].actual)
 
@@ -19,6 +20,12 @@
 
 #define canDeallocate(stats, dom) (unusedPct(stats, dom) > SAFE_UNUSED_THRESHOLD) && \
     !(isUnusedBelowThreshold(stats, dom))
+
+int isWasteful(MemStats *stats, int dom)
+{
+    return stats->domainStats[dom].unused >= MAX_FREE_MEMORY &&
+        stats->domainDeltas[dom].unused >= 0;
+}
 
 int allocateStarvingGuests(AllocPlan *plan, MemStats *stats)
 {
@@ -60,16 +67,17 @@ error:
 int deallocateWastefulGuests(AllocPlan *plan, MemStats *stats)
 {
     int rt = 0;
-    DomainMemStats *deltas = NULL;
+    // DomainMemStats *deltas = NULL;
+    MemStatUnit aboveThresh = 0;
+    MemStatUnit toDealloc = 0;
     for (int d = 0; d < plan->numDomains; d++) {
-        deltas = stats->domainDeltas + d;
-
-        if (deltas->unused > MIN_CHANGE_FOR_DEALLOC && canDeallocate(stats, d)) {
-            // domain has released some memory and is above threshold
-            printf("Domain %d has released %'.2fkb and is above threshold (%.2f%%)\n",
-                d, deltas->unused, unusedPct(stats, d) * 100);
-            rt = AllocPlanAddDealloc(plan, d, deltas->unused);
-            check(rt == 0, "failed to add deallocation to plan");
+        if (isWasteful(stats, d)) {
+            aboveThresh = stats->domainStats[d].unused - MAX_FREE_MEMORY;
+            toDealloc = aboveThresh / 2;
+            printf("Domain %d is wasteful with %'.2fkb unused above threshold, to dealloc %'.2fkb\n",
+                d, aboveThresh, toDealloc);
+            rt = AllocPlanAddDealloc(plan, d, toDealloc);
+            check(rt == 0, "failed to add wasteful dealloc to plan");
         }
     }
     return 0;
@@ -116,6 +124,7 @@ error:
 int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
 {
     int rt = 0;
+    unsigned long newSize;
     virDomainPtr domain;
     for (int i = 0; i < plan->numDomains; i++) {
         domain = GuestListDomainAt(guests, i);
