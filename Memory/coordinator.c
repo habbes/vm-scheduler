@@ -12,6 +12,8 @@
 #define MIN_GUEST_MEMORY 100 * 1024
 #define MIN_HOST_MEMORY 200 * 1024
 #define MAX_FREE_MEMORY 300 * 1024
+// minimum amount that can be deallocated
+#define MIN_DEALLOC_AMOUNT 1024
 
 #define unusedPct(stats, dom) ((stats)->domainStats[(dom)].unused / (stats)->domainStats[(dom)].actual)
 
@@ -73,7 +75,7 @@ int deallocateWastefulGuests(AllocPlan *plan, MemStats *stats)
     for (int d = 0; d < plan->numDomains; d++) {
         if (isWasteful(stats, d)) {
             aboveThresh = stats->domainStats[d].unused - MAX_FREE_MEMORY;
-            toDealloc = aboveThresh / 2;
+            toDealloc = max(aboveThresh / 2, MIN_DEALLOC_AMOUNT);
             printf("Domain %d is wasteful with %'.2fkb unused above threshold, to dealloc %'.2fkb\n",
                 d, aboveThresh, toDealloc);
             rt = AllocPlanAddDealloc(plan, d, toDealloc);
