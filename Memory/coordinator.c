@@ -14,6 +14,8 @@
 #define MAX_FREE_MEMORY 300 * 1024
 // minimum amount that can be deallocated
 #define MIN_DEALLOC_AMOUNT 1024
+// maximum amount to dealloc from wasteful guest
+#define MAX_WASTEFUL_DEALLOC_AMOUNT 50 * 1024
 
 #define unusedPct(stats, dom) ((stats)->domainStats[(dom)].unused / (stats)->domainStats[(dom)].actual)
 
@@ -76,6 +78,8 @@ int deallocateWastefulGuests(AllocPlan *plan, MemStats *stats)
         if (isWasteful(stats, d)) {
             aboveThresh = stats->domainStats[d].unused - MAX_FREE_MEMORY;
             toDealloc = max(aboveThresh / 2, MIN_DEALLOC_AMOUNT);
+            // ensure deallocation happens gradually even if there's a lot of wasted memory
+            toDealloc = min(toDealloc, MAX_WASTEFUL_DEALLOC_AMOUNT);
             printf("Domain %d is wasteful with %'.2fkb unused above threshold, to dealloc %'.2fkb\n",
                 d, aboveThresh, toDealloc);
             rt = AllocPlanAddDealloc(plan, d, toDealloc);
@@ -123,7 +127,7 @@ error:
     return -1;
 }
 
-int readjustAllocsToFitHostMemory(AllocPlan *plan, MemStats *stats)
+void readjustAllocsToFitHostMemory(AllocPlan *plan, MemStats *stats)
 {
     double remainingFree = 0;
     double excess = 0;
@@ -136,22 +140,16 @@ int readjustAllocsToFitHostMemory(AllocPlan *plan, MemStats *stats)
     excess = excess > 0 ? excess : 0;
     excessOnDomain = stats->numDomains > 0 ? ceil(excess / stats->numDomains) : 0;
 
-    printf("Alloc diff: %'.1fkb, curr free: %'.1fkb, remaining free: %'.1fkb, min free: %'lukb , excess: %'.1fkb, excess dom: %'.2fkb\n",
+    printf("Alloc diff: %'.1fkb, curr free: %'.1fkb, remaining free: %'.1fkb, min free: %'dkb , excess: %'.1fkb, excess dom: %'.2fkb\n",
         AllocPlanDiff(plan), stats->hostStats.free, remainingFree, MIN_HOST_MEMORY, excess, excessOnDomain);
     if (excessOnDomain > 0) {
-        // reduce sizes of domains with increased memory so to not to use up host free memory
+        // reduce sizes of domains so as not to exceed free host memory
         for (int i = 0; i < plan->numDomains; i++) {
-            if (plan->newSizes[i] <= stats->domainStats[i].actual) continue;
-    
             plan->newSizes[i] = plan->newSizes[i] - (unsigned long) excessOnDomain;
             printf("Free host memory exceeded by %'.1fkb, remove %'.1fkb from domain %d, new size %'lu\n",
                 excess, excessOnDomain, i, plan->newSizes[i]);
         }
     }
-
-    return 0;
-error:
-    return -1;
 }
 
 int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
@@ -200,8 +198,7 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
     check(rt == 0, "failed to compute new memory sizes");
 
     // readjust sizes in order not to exceed free host memory
-    rt = readjustAllocsToFitHostMemory(plan, stats);
-    check(rt == 0, "failed to readjust allocas");
+    readjustAllocsToFitHostMemory(plan, stats);
 
     rt = executeAllocationPlan(plan, stats, guests);
     check(rt == 0, "failed to execute allocation plan");
