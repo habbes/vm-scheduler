@@ -124,13 +124,14 @@ error:
 int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
 {
     int rt = 0;
-    unsigned long newSize;
+    unsigned long newSize = 0;
     virDomainPtr domain;
     for (int i = 0; i < plan->numDomains; i++) {
         domain = GuestListDomainAt(guests, i);
-        if (!almostEquals(plan->newSizes[i], stats->domainStats[i].actual)) {
-            printf("Setting memory %'lukb for domain %d\n", plan->newSizes[i], i);
-            rt = virDomainSetMemory(domain, plan->newSizes[i]);
+        newSize = min(plan->newSizes[i], stats->domainStats[i].max);
+        if (!almostEquals(newSize, stats->domainStats[i].actual)) {
+            printf("Setting memory %'lukb for domain %d\n", newSize, i);
+            rt = virDomainSetMemory(domain, newSize);
             check(rt == 0, "failed to set memory for domain");
         }
     }

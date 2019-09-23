@@ -3,6 +3,8 @@
 
 #define EQUALITY_PRECISION 100
 
+#define min(a, b) ((a) <= (b) ? (a) : (b))
+
 /**
  * count the number of bits in `byte` that are set
  * to 1. Only the `maxBits` least significant
@@ -14,5 +16,6 @@ int countOnBits(unsigned char byte, int maxBits);
 
 int almostEquals(double a, double b);
 int certainlyGreaterThan(double a, double b);
+
 
 #endif
