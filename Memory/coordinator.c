@@ -57,7 +57,8 @@ int allocateStarvingGuests(AllocPlan *plan, MemStats *stats)
             // domain is not using memory, but still starving
             // allocate only what's needed to reach threshold
             distToThresh = MIN_GUEST_MEMORY - MemStatsUnused(stats, d);
-            printf("Domain %d is inactive but below threshold (%.1fkb)\n", d, threshold);
+            printf("Domain %d is inactive but below threshold (%.1fkb), to allocate %'.1fkb\n",
+                d, threshold, ceil(distToThresh));
             rt = AllocPlanAddAlloc(plan, d, ceil(distToThresh));
         }
     }
@@ -95,6 +96,8 @@ int deallocateSafeGuests(AllocPlan *plan, MemStats *stats)
 {
     int rt = 0;
     MemStatUnit deallocMem = 0;
+    MemStatUnit deallocQuota = 0;
+    MemStatUnit maxQuota = 0;
     deallocMem = AllocPlanDiff(plan);
     int candidates = 0;
 
@@ -108,9 +111,11 @@ int deallocateSafeGuests(AllocPlan *plan, MemStats *stats)
     }
 
     if (candidates > 0) {
-        MemStatUnit deallocQuota = deallocMem / candidates;
+        deallocQuota = deallocMem / candidates;
 
         for (int d = 0; d < plan->numDomains; d++) {
+            maxQuota = stats->domainStats[d].actual - MIN_GUEST_MEMORY;
+            deallocQuota = min(deallocQuota, maxQuota);
             if (canDeallocate(stats, d)) {
                printf("Domain %d eligible for deallocating %'.2fkb\n", d, deallocQuota);
                rt = AllocPlanAddDealloc(plan, d, deallocQuota);
@@ -138,12 +143,12 @@ void readjustAllocsToFitHostMemory(AllocPlan *plan, MemStats *stats)
     excess = (double) MIN_HOST_MEMORY - remainingFree;
     // how much the new allocations would exceed free memory
     excess = excess > 0 ? excess : 0;
+    // how much memory each vm should give back to host to avoid using up free memory on host
     excessOnDomain = stats->numDomains > 0 ? ceil(excess / stats->numDomains) : 0;
 
     printf("Alloc diff: %'.1fkb, curr free: %'.1fkb, remaining free: %'.1fkb, min free: %'dkb , excess: %'.1fkb, excess dom: %'.2fkb\n",
         AllocPlanDiff(plan), stats->hostStats.free, remainingFree, MIN_HOST_MEMORY, excess, excessOnDomain);
     if (excessOnDomain > 0) {
-        // reduce sizes of domains so as not to exceed free host memory
         for (int i = 0; i < plan->numDomains; i++) {
             plan->newSizes[i] = plan->newSizes[i] - (unsigned long) excessOnDomain;
             printf("Free host memory exceeded by %'.1fkb, remove %'.1fkb from domain %d, new size %'lu\n",
