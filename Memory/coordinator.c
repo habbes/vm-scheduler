@@ -121,6 +121,37 @@ error:
     return -1;
 }
 
+int readjustAllocsToFitHostMemory(AllocPlan *plan, MemStats *stats)
+{
+    double remainingFree = 0;
+    double excess = 0;
+    double excessOnDomain = 0;
+    
+    // what would be left of free memory if host memory was used to allocate vms
+    remainingFree = (double) stats->hostStats.free - (double) AllocPlanDiff(plan);
+    excess = (double) MIN_HOST_MEMORY - remainingFree;
+    // how much the new allocations would exceed free memory
+    excess = excess > 0 ? excess : 0;
+    excessOnDomain = stats->numDomains > 0 ? ceil(excess / stats->numDomains) : 0;
+
+    printf("Alloc diff: %'.1fkb, curr free: %'.1fkb, remaining free: %'.1fkb, min free: %'lukb , excess: %'.1fkb, excess dom: %'.2fkb\n",
+        AllocPlanDiff(plan), stats->hostStats.free, remainingFree, MIN_HOST_MEMORY, excess, excessOnDomain);
+    if (excessOnDomain > 0) {
+        // reduce sizes of domains with increased memory so to not to use up host free memory
+        for (int i = 0; i < plan->numDomains; i++) {
+            if (plan->newSizes[i] <= stats->domainStats[i].actual) continue;
+    
+            plan->newSizes[i] = plan->newSizes[i] - (unsigned long) excessOnDomain;
+            printf("Free host memory exceeded by %'.1fkb, remove %'.1fkb from domain %d, new size %'lu\n",
+                excess, excessOnDomain, i, plan->newSizes[i]);
+        }
+    }
+
+    return 0;
+error:
+    return -1;
+}
+
 int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
 {
     int rt = 0;
@@ -163,8 +194,13 @@ int reallocateMemory(MemStats *stats, GuestList *guests)
     rt = deallocateSafeGuests(plan, stats);
     check(rt == 0, "failed to deallocate safe guests");
     
-    rt = AllocPlanComputeNewSizes(plan, stats, MIN_HOST_MEMORY);
+    rt = AllocPlanComputeNewSizes(plan, stats);
     check(rt == 0, "failed to compute new memory sizes");
+
+    // readjust sizes in order not to exceed free host memory
+    rt = readjustAllocsToFitHostMemory(plan, stats);
+    check(rt == 0, "failed to readjust allocas");
+
     rt = executeAllocationPlan(plan, stats, guests);
     check(rt == 0, "failed to execute allocation plan");
 
