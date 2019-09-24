@@ -30,13 +30,15 @@ example:
 ./memory_coordinator 12
 ```
 
+Terminate the program using `Ctrl+C` keyboard command.
+
 ## Memory allocation policy
 
 Let's first by defining some terms that will be used in the policy description:
 
 - MB: 1024 KB
 - KB: 1024 bytes
-- Starving domain: domain with <= 100 MB domain
+- Starving domain: domain with <= 100 MB unused memory
 - Active starving domain: starving domain that is actively consuming memory 
 (i.e the amount of unused memory changes between consecutive two cycles)
 - Wasteful domain: domain with >= 300MB unused memory
@@ -46,7 +48,7 @@ and that is neither starving nor wasteful (i.e. unused memory between 100-300MB)
 
 At a high level, in each cycle the policy aims to keep the memory utilization fair by allocating memory to domains
 which are starving and release memory from domains which are wasteful. Before setting new memory sizes, the coordinator will iterate through each domains a couple of times to figure out how much
-memory to allocate/deallocate from each. It keeps tracks of these amounts in an allocation plan
+memory to allocate/de-allocate from each. It keeps tracks of these amounts in an allocation plan
 structure (`AllocPlan`).
 
 Each active starving domain will receive twice the the memory it used up since the last cycle, or twice the memory it needs to reach the 100mb threshold, whichever of the two is greater. This is to ensure the domain has enough memory available for continue consuming
