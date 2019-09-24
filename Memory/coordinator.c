@@ -19,6 +19,8 @@
 
 #define unusedPct(stats, dom) ((stats)->domainStats[(dom)].unused / (stats)->domainStats[(dom)].actual)
 
+#define unusedThreshold(stats, dom) max(unusedPct(stats, dom), MIN_GUEST_MEMORY)
+
 #define isUnusedBelowThreshold(stats, dom) (unusedPct(stats, dom) < LOW_UNUSED_THRESHOLD || \
     MemStatsUnused(stats, dom) <= MIN_GUEST_MEMORY)
 
@@ -36,30 +38,34 @@ int allocateStarvingGuests(AllocPlan *plan, MemStats *stats)
     int rt = 0;
     double threshold = 0;
     double distToThresh = 0;
+    double toAlloc = 0;
     DomainMemStats *deltas = NULL;
 
     for (int d = 0; d < plan->numDomains; d++) {
         deltas = stats->domainDeltas + d;
         threshold = unusedPct(stats, d) * MemStatsActual(stats, d);
         threshold = threshold > MIN_GUEST_MEMORY ? threshold : MIN_GUEST_MEMORY;
+        distToThresh = threshold - MemStatsUnused(stats, d);
 
         if (certainlyGreaterThan(0, deltas->unused) && isUnusedBelowThreshold(stats, d)) {
             // domain has used up more memory and is below threshold
-            distToThresh = threshold - MemStatsUnused(stats, d);
-            printf("Domain %d has used %'.2fkb and is below threshold (%.1fkb)\n",
-                d, -deltas->unused, threshold);
-            // allocate double the amount needed to reach threshold since domain
+            // allocate more than the amount needed to reach threshold since domain
             // is still eating up memory
-            rt = AllocPlanAddAlloc(plan, d, ceil(2 * distToThresh));
+            toAlloc = 2 * distToThresh;
+            toAlloc = max(toAlloc, 2 * (-deltas->unused));
+            toAlloc = ceil(toAlloc);
+            printf("Domain %d has used %'.2fkb and is below threshold (%.1fkb), to allocate %'.1fkb\n",
+                d, -deltas->unused, threshold, toAlloc);
+            rt = AllocPlanAddAlloc(plan, d, toAlloc);
             check(rt == 0, "failed to add allocation to plan");
         }
         else if (isUnusedBelowThreshold(stats, d)) {
             // domain is not using memory, but still starving
             // allocate only what's needed to reach threshold
-            distToThresh = MIN_GUEST_MEMORY - MemStatsUnused(stats, d);
+            toAlloc = ceil(distToThresh);
             printf("Domain %d is inactive but below threshold (%.1fkb), to allocate %'.1fkb\n",
-                d, threshold, ceil(distToThresh));
-            rt = AllocPlanAddAlloc(plan, d, ceil(distToThresh));
+                d, threshold, toAlloc);
+            rt = AllocPlanAddAlloc(plan, d, toAlloc);
         }
     }
 
@@ -114,7 +120,7 @@ int deallocateSafeGuests(AllocPlan *plan, MemStats *stats)
         deallocQuota = deallocMem / candidates;
 
         for (int d = 0; d < plan->numDomains; d++) {
-            maxQuota = stats->domainStats[d].actual - MIN_GUEST_MEMORY;
+            maxQuota = stats->domainStats[d].unused - unusedThreshold(stats, d);
             deallocQuota = min(deallocQuota, maxQuota);
             if (canDeallocate(stats, d)) {
                printf("Domain %d eligible for deallocating %'.2fkb\n", d, deallocQuota);
@@ -165,6 +171,7 @@ int executeAllocationPlan(AllocPlan *plan, MemStats *stats, GuestList *guests)
     for (int i = 0; i < plan->numDomains; i++) {
         domain = GuestListDomainAt(guests, i);
         newSize = min(plan->newSizes[i], stats->domainStats[i].max);
+        newSize = max(newSize, MIN_GUEST_MEMORY);
         if (!almostEquals(newSize, stats->domainStats[i].actual)) {
             printf("Setting memory %'lukb for domain %d\n", newSize, i);
             rt = virDomainSetMemory(domain, newSize);
