@@ -1,4 +1,4 @@
-CPU/vcpu_scheduler
-CPU/*.o
-Memory/memory_coordinator
-Memory/*.o
+cpu_temp/vcpu_scheduler
+cpu/*.o
+memory_temp/memory_coordinator
+memory_temp/*.o
