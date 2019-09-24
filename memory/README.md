@@ -32,6 +32,13 @@ example:
 
 Terminate the program using `Ctrl+C` keyboard command.
 
+To observe the test case behaviours properly, it's advisable to use a host
+with > 6GB memory, this is to ensure that the host has sufficient free memory
+when the guests are consuming more and more memory. If the host does not
+have sufficient free memory to begin with, it might run low on free memory
+even before the memory coordinator starts to execute its policy. This is
+especially the case for test cases 2 and 3.
+
 ## Memory allocation policy
 
 Let's first by defining some terms that will be used in the policy description:
@@ -51,11 +58,11 @@ which are starving and release memory from domains which are wasteful. Before se
 memory to allocate/de-allocate from each. It keeps tracks of these amounts in an allocation plan
 structure (`AllocPlan`).
 
-Each active starving domain will receive twice the the memory it used up since the last cycle, or twice the memory it needs to reach the 100mb threshold, whichever of the two is greater. This is to ensure the domain has enough memory available for continue consuming
+Each active starving domain will receive 3 times the the memory it used up since the last cycle, or 3 times the memory it needs to reach the 100mb threshold, whichever of the two is greater. This is to ensure the domain has enough memory available for continue consuming
 while the coordinator is asleep. A starving domain that is not actively consuming memory will only
 receive the memory it needs to reach the 100MB threshold.
 
-Each wasteful domain will lose half of the memory it has above the 300MB threshold, up to 50MB (this ensures memory is de-allocated gradually even if a huge amount of memory is released at once).
+Each wasteful domain will lose half of the memory it has above the 300MB threshold, up to 100MB (this cap ensures memory is de-allocated gradually even if a huge amount of memory is released at once).
 
 If the memory freed from wasteful domains is not enough to cover the memory needed by starving domains,
 then the difference memory is evenly freed from stable domains. If there are 3 stable domains
@@ -90,3 +97,4 @@ Cons:
 to the host even when there are starving domains which could use some memory
 - In some cases some domains may stay below 100MB for a while because it maybe impossible
 to strictly adhere to constraints of all domains as well as those of the host
+- In the case of test case 2, if 3 VMs happen to release their memory one cycle before the 4th, then they will start losing memory which gets allocated to the 4th VM. This makes it hard to observe the expected behaviour of 4 vms gradually losing memory at the same time.

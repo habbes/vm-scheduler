@@ -4,7 +4,7 @@
 #define isPinnedToCpu(cpuMap, targetCpuMask) (((cpuMap) & (targetCpuMask)) == (targetCpuMask))
 #define getCpuMask(cpu) ((unsigned char) 1 << cpu)
 
-#define EQUALITY_PRECISION 0.01
+#define EQUALITY_PRECISION 0.1
 
 /**
  * count the number of bits in `byte` that are set

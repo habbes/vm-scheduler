@@ -1,4 +1,4 @@
-CFLAGS =-g -Wall -D_GNU_SOURCE
+CFLAGS =-g -Wall
 
 SRC = $(wildcard *.c)
 OBJ = $(SRC:.c=.o)

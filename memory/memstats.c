@@ -164,14 +164,10 @@ void MemStatsPrint(MemStats *stats, GuestList *guests)
         printf("Domain %d (%s) stats\n", i, virDomainGetName(GuestListDomainAt(guests, i)));
         printf("-- Actual: %'.2f\n", stats->domainStats[i].actual);
         printf("-- Unused: %'.2f\n", stats->domainStats[i].unused);
-        printf("-- Usable: %'.2f\n", stats->domainStats[i].usable);
-        printf("-- Available: %'.2f\n", stats->domainStats[i].available);
         printf("-- Max: %'.2f\n", stats->domainStats[i].max);
         printf("Domain %d deltas\n", i);
         printf("-- Actual: %'.2f\n", stats->domainDeltas[i].actual);
         printf("-- Unused: %'.2f\n", stats->domainDeltas[i].unused);
-        printf("-- Usable: %'.2f\n", stats->domainDeltas[i].usable);
-        printf("-- Available: %'.2f\n", stats->domainDeltas[i].available);
         puts("");
     }
 }

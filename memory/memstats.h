@@ -51,6 +51,7 @@ typedef struct MemStats {
 #define MemStatsUnused(stats, dom) ((stats)->domainStats[(dom)].unused)
 #define MemStatsUsable(stats, dom) ((stats)->domainStats[(dom)].usable)
 #define MemStatsActual(stats, dom) ((stats)->domainStats[(dom)].actual)
+#define MemStatsUnusedDelta(stats, dom) ((stats)->domainDeltas[(dom)].unused)
 
 MemStats *MemStatsCreate(virConnectPtr conn, GuestList *guests);
 void MemStatsFree(MemStats *stats);

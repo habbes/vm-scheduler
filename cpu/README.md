@@ -30,6 +30,12 @@ Example:
 ```
 Terminate the program using `Ctrl-C` keyboard command.
 
+Results in log files were obtained using 5 seconds intervals:
+
+```
+./cpu_scheduler 5
+```
+
 ## CPU Scheduler Policy
 
 The CPU scheduler aims to distribute the total usages of the domains
@@ -51,7 +57,7 @@ the vCPUs pinned to that pCPU (even if that vCPUs were not using that pCPU in th
 
 Once the scheduler computes `targetWeight` and `currentWeight` of each pCPU, it checks
 whether the pCPUs are currently balanced. The system is considered to be in balance if
-for each pCPU the `targetWeight` is close to `currentWeight`. The threshold to determine whether they are close is currently set at `0.01`, i.e. 0.79 and 0.80 are considered close.
+for each pCPU the `targetWeight` is close to `currentWeight`. The threshold to determine whether they are close is currently set at `0.1`, i.e. 0.70 and 0.80 are considered close.
 
 If the pCPUs are balanced, no remapping is performed, and this completes the scheduler cycle.
 
