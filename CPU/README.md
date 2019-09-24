@@ -59,7 +59,7 @@ If the pCPUs are not balanced, then the scheduler tries to compute new mappings 
 
 In one pass of the remapping algorithm, each pCPU will have been allocated at most one vCPU, and the N vCPUs with the leading usage will have been pinned to a pCPU, where N is the number of pCPUs. The process will be repeated until no pCPU can be allocated any more vCPUs. This occurs when the pCPU has reached its `targetWeight`, when all vCPUs have already been pinned to that pCPU, or when any remaining vCPU will cause the pCPU to exceed its `targetWeight`.
 
-Example, assuming there are 8 vCPUs an 4 pCPUs. Half of the vCPUs have a usage of 0.75 and the other half a usage of 0.25. The `targetWeight` in this case will be `(0.75*4 + 0.25*4)/4` = `1`.
+For example, assuming there are 8 vCPUs an 4 pCPUs. Half of the vCPUs have a usage of 0.75 and the other half a usage of 0.25. The `targetWeight` in this case will be `(0.75*4 + 0.25*4)/4` = `1`.
 Then in the first pass of the remapping algorithm,
 the 4 vCPUs with 0.75 usage will be pinned to the 4 pCPUs, one each. And the pCPUs weights will be 0.75 each. In the second pass each of the remaining 0.25 vCPUs will be mapped to the 4 pCPUs, one each. At these point the pCPU weights weill be `1` each. In the third pass, no vCPU will be mapped to pCPU because the `targetWeight` for each pCPU has been reached. Because no pCPU has been allocated an additional vCPU, the remapping algorithm terminates.
 
