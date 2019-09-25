@@ -3,3 +3,4 @@ cpu/*.o
 memory/memory_coordinator
 memory/*.o
 *.zip
+.DS_Store
