@@ -2,3 +2,4 @@ cpu/vcpu_scheduler
 cpu/*.o
 memory/memory_coordinator
 memory/*.o
+*.zip
